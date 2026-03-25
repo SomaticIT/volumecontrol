@@ -1,22 +1,23 @@
 # CI workflow for the volumecontrol-linux (PulseAudio) crate.
 #
 # Build matrix
-# ┌───────────────────────────────────┬──────────────┬───────────────┐
-# │ target                            │ libc         │ pulseaudio    │
-# ├───────────────────────────────────┼──────────────┼───────────────┤
-# │ x86_64-unknown-linux-gnu  (native)│ glibc        │ build + test  │
-# │ x86_64-unknown-linux-musl         │ musl         │ check only    │
-# │ aarch64-unknown-linux-gnu         │ glibc        │ check only    │
-# │ aarch64-unknown-linux-musl        │ musl         │ check only    │
-# │ armv7-unknown-linux-gnueabihf     │ glibc        │ check only    │
-# │ armv7-unknown-linux-musleabihf    │ musl         │ check only    │
-# └───────────────────────────────────┴──────────────┴───────────────┘
+# ┌───────────────────────────────────┬──────────────┬──────────────────────┐
+# │ target                            │ libc         │ pulseaudio           │
+# ├───────────────────────────────────┼──────────────┼──────────────────────┤
+# │ x86_64-unknown-linux-gnu  (native)│ glibc        │ build + test         │
+# │ aarch64-unknown-linux-gnu  (cross)│ glibc        │ build + test (cross) │
+# │ armv7-unknown-linux-gnueabihf     │ glibc        │ build + test (cross) │
+# │ x86_64-unknown-linux-musl  (cross)│ musl         │ check only (stub)    │
+# │ aarch64-unknown-linux-musl        │ musl         │ check only (stub)    │
+# │ armv7-unknown-linux-musleabihf    │ musl         │ check only (stub)    │
+# └───────────────────────────────────┴──────────────┴──────────────────────┘
 #
-# NOTE: The `pulseaudio` feature requires `libpulse-dev` (and its transitive
-# dependency `libasound2-dev`) to be installed on the build host.  For the
-# native x86_64-gnu runner these packages are installed before building.
-# Cross-compilation targets use `cargo check` without the feature so that no
-# native PulseAudio libraries are needed.
+# Cross-compilation uses `cross` (https://github.com/cross-rs/cross).
+# GNU targets install libpulse-dev and libasound2-dev for the target
+# architecture via the [workspace.metadata.cross.target.*] pre-build hooks
+# in Cargo.toml.
+# musl targets cannot link against glibc-backed libpulse.so, so they verify
+# only that the no-feature stub compiles correctly.
 
 name: CI – Linux (PulseAudio)
 
@@ -86,28 +87,35 @@ jobs:
       - name: cargo test (no features – stub path)
         run: cargo test -p volumecontrol-linux
 
-  # ── Cross-compilation check (stub path, no PulseAudio libraries needed) ─────
-  cross-check:
-    name: Check (${{ matrix.target }})
+  # ── Cross-compilation with `cross` (build + test on GNU; check on musl) ──────
+  cross:
+    name: Cross (${{ matrix.target }})
     runs-on: ubuntu-latest
 
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-musl
-          - aarch64-unknown-linux-gnu
-          - aarch64-unknown-linux-musl
-          - armv7-unknown-linux-gnueabihf
-          - armv7-unknown-linux-musleabihf
+        include:
+          # musl targets: PulseAudio's shared library is glibc-linked and cannot
+          # be linked into musl binaries.  We verify the stub path compiles.
+          - target: x86_64-unknown-linux-musl
+            can_run_tests: false
+          - target: aarch64-unknown-linux-musl
+            can_run_tests: false
+          - target: armv7-unknown-linux-musleabihf
+            can_run_tests: false
+          # GNU targets: cross installs libpulse-dev via the pre-build steps in
+          # Cargo.toml, enabling a full build and test run under QEMU.
+          - target: aarch64-unknown-linux-gnu
+            can_run_tests: true
+          - target: armv7-unknown-linux-gnueabihf
+            can_run_tests: true
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust (stable) + target
+      - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - name: Cache Cargo registry
         uses: actions/cache@v4
@@ -118,16 +126,37 @@ jobs:
           key: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-
 
-      # cargo check does not link, so no cross-compiled libpulse is needed.
-      # We check both the stub path (no feature) and the workspace as a whole.
-      - name: cargo check – volumecontrol-linux (no features)
+      - name: Install cross
+        run: cargo install cross --locked
+
+      # ── GNU targets: full build + test with the `pulseaudio` feature ──
+      - name: cross build (pulseaudio feature)
+        if: matrix.can_run_tests
         run: >
-          cargo check
+          cross build
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+          --features pulseaudio
+
+      - name: cross test (pulseaudio feature)
+        if: matrix.can_run_tests
+        run: >
+          cross test
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+          --features pulseaudio
+
+      # ── musl targets: type-check only (no pulseaudio feature) ──
+      - name: cross check – volumecontrol-linux (no features)
+        if: "!matrix.can_run_tests"
+        run: >
+          cross check
           -p volumecontrol-linux
           --target ${{ matrix.target }}
 
-      - name: cargo check – whole workspace (no features)
+      - name: cross check – whole workspace (no features)
+        if: "!matrix.can_run_tests"
         run: >
-          cargo check
+          cross check
           --workspace
           --target ${{ matrix.target }}

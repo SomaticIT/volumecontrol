@@ -184,4 +184,117 @@ mod tests {
             AudioError::Unsupported
         ));
     }
+
+    // ── Tests for the `pulseaudio` feature ───────────────────────────────────
+    //
+    // These tests do not require a running PulseAudio server.  When no server
+    // is available every method that opens a connection returns
+    // `Err(AudioError::InitializationFailed(_))`.  When a server is running
+    // but the requested resource does not exist the constructors return
+    // `Err(AudioError::DeviceNotFound)`.
+
+    /// Looks up a sink ID that is guaranteed not to exist.
+    /// Expects `DeviceNotFound` (server running, no such sink) or
+    /// `InitializationFailed` (no server running).
+    #[cfg(feature = "pulseaudio")]
+    #[test]
+    fn from_id_fails_for_nonexistent_sink() {
+        let result = AudioDevice::from_id("__nonexistent_sink_xyz__");
+        assert!(result.is_err(), "expected an error, got Ok");
+        let err = result.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AudioError::DeviceNotFound | AudioError::InitializationFailed(_)
+            ),
+            "unexpected error variant: {err:?}"
+        );
+    }
+
+    /// Searches by a description that is guaranteed not to match any sink.
+    #[cfg(feature = "pulseaudio")]
+    #[test]
+    fn from_name_fails_for_nonexistent_description() {
+        let result = AudioDevice::from_name("__nonexistent_description_xyz__");
+        assert!(result.is_err(), "expected an error, got Ok");
+        let err = result.unwrap_err();
+        assert!(
+            matches!(
+                err,
+                AudioError::DeviceNotFound | AudioError::InitializationFailed(_)
+            ),
+            "unexpected error variant: {err:?}"
+        );
+    }
+
+    /// `list()` must either succeed (returns `Ok`) or fail with
+    /// `InitializationFailed` — it must never panic or return an unexpected
+    /// error variant.
+    #[cfg(feature = "pulseaudio")]
+    #[test]
+    fn list_returns_ok_or_init_failed() {
+        let result = AudioDevice::list();
+        match &result {
+            Ok(_) => {}
+            Err(AudioError::InitializationFailed(_)) => {}
+            Err(e) => panic!("unexpected error from list(): {e:?}"),
+        }
+    }
+
+    /// `default()` must either succeed, return `DeviceNotFound` (no default
+    /// sink configured), or return `InitializationFailed` (no server).
+    #[cfg(feature = "pulseaudio")]
+    #[test]
+    fn default_returns_ok_or_known_error() {
+        let result = AudioDevice::default();
+        match &result {
+            Ok(_) => {}
+            Err(AudioError::InitializationFailed(_)) | Err(AudioError::DeviceNotFound) => {}
+            Err(e) => panic!("unexpected error from default(): {e:?}"),
+        }
+    }
+
+    /// `get_vol`, `is_mute`, and `set_vol` on a device whose sink ID does not
+    /// exist return `DeviceNotFound` (server running) or `InitializationFailed`
+    /// (no server).
+    #[cfg(feature = "pulseaudio")]
+    #[test]
+    fn self_methods_fail_for_nonexistent_sink() {
+        let device = AudioDevice {
+            id: "__nonexistent_sink_xyz__".to_string(),
+            name: String::new(),
+        };
+
+        let result = device.get_vol();
+        assert!(result.is_err(), "get_vol: expected error, got Ok");
+        assert!(
+            matches!(
+                result.unwrap_err(),
+                AudioError::DeviceNotFound | AudioError::InitializationFailed(_)
+            ),
+            "get_vol: unexpected error variant"
+        );
+
+        let result = device.is_mute();
+        assert!(result.is_err(), "is_mute: expected error, got Ok");
+        assert!(
+            matches!(
+                result.unwrap_err(),
+                AudioError::DeviceNotFound | AudioError::InitializationFailed(_)
+            ),
+            "is_mute: unexpected error variant"
+        );
+
+        // set_vol fetches the current ChannelVolumes first (via sink_by_name),
+        // so a missing sink surfaces as DeviceNotFound before any write.
+        let result = device.set_vol(50);
+        assert!(result.is_err(), "set_vol: expected error, got Ok");
+        assert!(
+            matches!(
+                result.unwrap_err(),
+                AudioError::DeviceNotFound | AudioError::InitializationFailed(_)
+            ),
+            "set_vol: unexpected error variant"
+        );
+    }
 }
