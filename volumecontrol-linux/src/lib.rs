@@ -1,4 +1,4 @@
-use volumecontrol_core::AudioError;
+use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
 
 #[cfg(feature = "pulseaudio")]
 mod pulse;
@@ -20,7 +20,7 @@ pub struct AudioDevice {
     name: String,
 }
 
-impl volumecontrol_core::AudioDevice for AudioDevice {
+impl AudioDeviceTrait for AudioDevice {
     fn default() -> Result<Self, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
@@ -122,7 +122,7 @@ impl volumecontrol_core::AudioDevice for AudioDevice {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use volumecontrol_core::AudioDevice as _;
+    use volumecontrol_core::AudioDevice as AudioDeviceTrait;
 
     #[cfg(not(feature = "pulseaudio"))]
     #[test]
