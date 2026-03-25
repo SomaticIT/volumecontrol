@@ -1,0 +1,58 @@
+name: Windows CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  windows:
+    name: ${{ matrix.target }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 64-bit x86 — primary Windows target; tests can run on the runner.
+          - target: x86_64-pc-windows-msvc
+            can_run_tests: true
+          # 32-bit x86 (i386) — WoW64 binaries run on the 64-bit runner.
+          - target: i686-pc-windows-msvc
+            can_run_tests: true
+          # ARM64 — cross-compile only; cannot execute on the x64 runner.
+          - target: aarch64-pc-windows-msvc
+            can_run_tests: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Build the crate with the real WASAPI backend enabled.
+      - name: Build (wasapi feature)
+        run: cargo build -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
+
+      # Run the stub-path tests (no real WASAPI calls) on targets where test
+      # binaries can be executed.
+      - name: Test (stub path)
+        if: matrix.can_run_tests
+        run: cargo test -p volumecontrol-windows --target ${{ matrix.target }}
+
+      # For ARM we can only build the test binary, not execute it.
+      - name: Build tests (ARM — cannot execute on x64 runner)
+        if: "!matrix.can_run_tests"
+        run: cargo test -p volumecontrol-windows --target ${{ matrix.target }} --no-run
+
+      # Lint with Clippy; all warnings are treated as errors.
+      - name: Clippy
+        run: >
+          cargo clippy
+          -p volumecontrol-windows
+          --all-targets
+          --all-features
+          --target ${{ matrix.target }}
+          -- -D warnings

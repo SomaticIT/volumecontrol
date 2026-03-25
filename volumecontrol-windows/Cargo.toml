@@ -14,9 +14,11 @@ volumecontrol-core = { workspace = true }
 version = "0.62"
 optional = true
 features = [
+    "Win32_Devices_Properties",
+    "Win32_Foundation",
     "Win32_Media_Audio",
     "Win32_System_Com",
-    "Win32_Foundation",
+    "Win32_UI_Shell_PropertiesSystem",
 ]
 
 [features]
