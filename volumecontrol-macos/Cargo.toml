@@ -13,7 +13,15 @@ volumecontrol-core = { workspace = true }
 [dependencies.objc2-core-audio]
 version = "0.3"
 optional = true
+default-features = false
+features = ["std", "AudioHardware"]
+
+[dependencies.objc2-core-foundation]
+version = "0.3"
+optional = true
+default-features = false
+features = ["std", "CFString"]
 
 [features]
 # Enable real CoreAudio integration. Only useful when building for macOS.
-coreaudio = ["dep:objc2-core-audio"]
+coreaudio = ["dep:objc2-core-audio", "dep:objc2-core-foundation"]

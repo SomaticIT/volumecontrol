@@ -1,3 +1,17 @@
+//! macOS CoreAudio volume control backend.
+//!
+//! This crate exposes an [`AudioDevice`] type that implements
+//! [`volumecontrol_core::AudioDevice`].  When the `coreaudio` feature is
+//! **not** enabled every method returns [`AudioError::Unsupported`], which
+//! allows the crate to be compiled on any platform without the CoreAudio SDK.
+//!
+//! When the `coreaudio` feature **is** enabled the implementation bridges to
+//! the native macOS CoreAudio Hardware Abstraction Layer (HAL) via the
+//! [`objc2_core_audio`] bindings.  All unsafe interactions with CoreAudio are
+//! contained in the [`internal`] module.
+
+mod internal;
+
 use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
 
 /// Represents a CoreAudio audio output device (macOS).
@@ -9,8 +23,7 @@ use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
 /// [`AudioError::Unsupported`].
 #[derive(Debug)]
 pub struct AudioDevice {
-    /// CoreAudio `AudioObjectID` serialized as a string.
-    // Fields are populated by the real implementation; unused in stubs.
+    /// CoreAudio `AudioObjectID` (serialized as a string for the public API).
     #[allow(dead_code)]
     id: String,
     /// Human-readable device name (`kAudioObjectPropertyName`).
@@ -18,13 +31,24 @@ pub struct AudioDevice {
     name: String,
 }
 
+#[cfg(feature = "coreaudio")]
+impl AudioDevice {
+    /// Constructs an [`AudioDevice`] from a raw CoreAudio `AudioObjectID`.
+    fn from_raw_id(raw_id: internal::AudioObjectID) -> Result<Self, AudioError> {
+        let name = internal::get_device_name(raw_id)?;
+        Ok(Self {
+            id: raw_id.to_string(),
+            name,
+        })
+    }
+}
+
 impl AudioDeviceTrait for AudioDevice {
     fn default() -> Result<Self, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            // TODO: query kAudioHardwarePropertyDefaultOutputDevice via
-            //       AudioObjectGetPropertyData using objc2-core-audio.
-            todo!("CoreAudio default device lookup not yet implemented")
+            let raw_id = internal::get_default_device_id()?;
+            Self::from_raw_id(raw_id)
         }
         #[cfg(not(feature = "coreaudio"))]
         Err(AudioError::Unsupported)
@@ -33,9 +57,17 @@ impl AudioDeviceTrait for AudioDevice {
     fn from_id(id: &str) -> Result<Self, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            let _ = id;
-            // TODO: parse AudioObjectID from string and verify it exists
-            todo!("CoreAudio device lookup by id not yet implemented")
+            // The public `id` is the decimal string representation of the
+            // `AudioObjectID`.  Parse it back and verify the device exists by
+            // fetching its name.
+            let raw_id: internal::AudioObjectID =
+                id.parse().map_err(|_| AudioError::DeviceNotFound)?;
+            // Listing devices lets us confirm this ID is valid.
+            let ids = internal::list_device_ids()?;
+            if !ids.contains(&raw_id) {
+                return Err(AudioError::DeviceNotFound);
+            }
+            Self::from_raw_id(raw_id)
         }
         #[cfg(not(feature = "coreaudio"))]
         {
@@ -47,9 +79,17 @@ impl AudioDeviceTrait for AudioDevice {
     fn from_name(name: &str) -> Result<Self, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            let _ = name;
-            // TODO: enumerate devices and match by kAudioObjectPropertyName
-            todo!("CoreAudio device lookup by name not yet implemented")
+            // Partial, case-sensitive substring match: returns the first device
+            // whose name contains `name`.  This mirrors the behaviour of the
+            // other platform backends and gives callers flexibility (e.g. "Air"
+            // matches "AirPods Pro").
+            for raw_id in internal::list_device_ids()? {
+                let device_name = internal::get_device_name(raw_id)?;
+                if device_name.contains(name) {
+                    return Self::from_raw_id(raw_id);
+                }
+            }
+            Err(AudioError::DeviceNotFound)
         }
         #[cfg(not(feature = "coreaudio"))]
         {
@@ -61,8 +101,13 @@ impl AudioDeviceTrait for AudioDevice {
     fn list() -> Result<Vec<(String, String)>, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            // TODO: query kAudioHardwarePropertyDevices and collect IDs/names
-            todo!("CoreAudio device listing not yet implemented")
+            let ids = internal::list_device_ids()?;
+            let mut devices = Vec::with_capacity(ids.len());
+            for raw_id in ids {
+                let name = internal::get_device_name(raw_id)?;
+                devices.push((raw_id.to_string(), name));
+            }
+            Ok(devices)
         }
         #[cfg(not(feature = "coreaudio"))]
         Err(AudioError::Unsupported)
@@ -71,8 +116,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn get_vol(&self) -> Result<u8, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            // TODO: read kAudioHardwareServiceDeviceProperty_VirtualMainVolume
-            todo!("CoreAudio get_vol not yet implemented")
+            let raw_id: internal::AudioObjectID =
+                self.id.parse().map_err(|_| AudioError::DeviceNotFound)?;
+            internal::get_volume(raw_id)
         }
         #[cfg(not(feature = "coreaudio"))]
         Err(AudioError::Unsupported)
@@ -81,9 +127,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn set_vol(&self, vol: u8) -> Result<(), AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            let _ = vol;
-            // TODO: write kAudioHardwareServiceDeviceProperty_VirtualMainVolume
-            todo!("CoreAudio set_vol not yet implemented")
+            let raw_id: internal::AudioObjectID =
+                self.id.parse().map_err(|_| AudioError::DeviceNotFound)?;
+            internal::set_volume(raw_id, vol)
         }
         #[cfg(not(feature = "coreaudio"))]
         {
@@ -95,8 +141,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn is_mute(&self) -> Result<bool, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            // TODO: read kAudioDevicePropertyMute
-            todo!("CoreAudio is_mute not yet implemented")
+            let raw_id: internal::AudioObjectID =
+                self.id.parse().map_err(|_| AudioError::DeviceNotFound)?;
+            internal::get_mute(raw_id)
         }
         #[cfg(not(feature = "coreaudio"))]
         Err(AudioError::Unsupported)
@@ -105,9 +152,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn set_mute(&self, muted: bool) -> Result<(), AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            let _ = muted;
-            // TODO: write kAudioDevicePropertyMute
-            todo!("CoreAudio set_mute not yet implemented")
+            let raw_id: internal::AudioObjectID =
+                self.id.parse().map_err(|_| AudioError::DeviceNotFound)?;
+            internal::set_mute(raw_id, muted)
         }
         #[cfg(not(feature = "coreaudio"))]
         {

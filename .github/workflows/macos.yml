@@ -1,0 +1,123 @@
+name: macOS CoreAudio CI
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "volumecontrol-macos/**"
+      - "volumecontrol-core/**"
+      - "volumecontrol/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/macos.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "volumecontrol-macos/**"
+      - "volumecontrol-core/**"
+      - "volumecontrol/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/macos.yml"
+
+jobs:
+  # ── per-architecture jobs ───────────────────────────────────────────────────
+
+  check-x86_64:
+    name: Check (x86_64-apple-darwin)
+    runs-on: macos-13 # Intel runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: cargo check (no features)
+        run: cargo check -p volumecontrol-macos --target x86_64-apple-darwin
+
+      - name: cargo check (coreaudio feature)
+        run: cargo check -p volumecontrol-macos --features coreaudio --target x86_64-apple-darwin
+
+      - name: cargo test (no features)
+        run: cargo test -p volumecontrol-macos --target x86_64-apple-darwin
+
+      - name: cargo test (coreaudio feature)
+        run: cargo test -p volumecontrol-macos --features coreaudio --target x86_64-apple-darwin
+
+      - name: cargo clippy (coreaudio feature)
+        run: >
+          cargo clippy -p volumecontrol-macos
+          --features coreaudio
+          --target x86_64-apple-darwin
+          --all-targets
+          -- -D warnings
+
+  check-aarch64:
+    name: Check (aarch64-apple-darwin)
+    runs-on: macos-14 # Apple Silicon (M1) runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: cargo check (no features)
+        run: cargo check -p volumecontrol-macos --target aarch64-apple-darwin
+
+      - name: cargo check (coreaudio feature)
+        run: cargo check -p volumecontrol-macos --features coreaudio --target aarch64-apple-darwin
+
+      - name: cargo test (no features)
+        run: cargo test -p volumecontrol-macos --target aarch64-apple-darwin
+
+      - name: cargo test (coreaudio feature)
+        run: cargo test -p volumecontrol-macos --features coreaudio --target aarch64-apple-darwin
+
+      - name: cargo clippy (coreaudio feature)
+        run: >
+          cargo clippy -p volumecontrol-macos
+          --features coreaudio
+          --target aarch64-apple-darwin
+          --all-targets
+          -- -D warnings
+
+  # ── universal binary job ────────────────────────────────────────────────────
+
+  check-universal:
+    name: Universal binary (x86_64 + aarch64)
+    runs-on: macos-14 # Apple Silicon; can cross-compile to x86_64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable with both Apple targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Build x86_64 slice (coreaudio feature)
+        run: >
+          cargo build -p volumecontrol-macos
+          --features coreaudio
+          --target x86_64-apple-darwin
+          --release
+
+      - name: Build aarch64 slice (coreaudio feature)
+        run: >
+          cargo build -p volumecontrol-macos
+          --features coreaudio
+          --target aarch64-apple-darwin
+          --release
+
+      - name: Combine into universal library with lipo
+        run: |
+          lipo -create \
+            target/x86_64-apple-darwin/release/libvolumecontrol_macos.rlib \
+            target/aarch64-apple-darwin/release/libvolumecontrol_macos.rlib \
+            -output target/libvolumecontrol_macos_universal.rlib
+
+      - name: Verify universal binary architectures
+        run: lipo -info target/libvolumecontrol_macos_universal.rlib
