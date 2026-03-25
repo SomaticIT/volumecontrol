@@ -1,0 +1,181 @@
+# CI workflow for the volumecontrol-linux (PulseAudio) crate.
+#
+# Build matrix
+# ┌───────────────────────────────────┬──────────────┬────────────────────────────────────────┐
+# │ target                            │ libc         │ steps                                  │
+# ├───────────────────────────────────┼──────────────┼────────────────────────────────────────┤
+# │ x86_64-unknown-linux-gnu  (native)│ glibc        │ check + build + test (±pulseaudio)     │
+# │ aarch64-unknown-linux-gnu  (cross)│ glibc        │ check + build (±pulseaudio)            │
+# │ armv7-unknown-linux-gnueabihf     │ glibc        │ check + build (±pulseaudio)            │
+# │ x86_64-unknown-linux-musl  (cross)│ musl         │ check only (±pulseaudio)               │
+# │ aarch64-unknown-linux-musl        │ musl         │ check only (±pulseaudio)               │
+# │ armv7-unknown-linux-musleabihf    │ musl         │ check only (±pulseaudio)               │
+# └───────────────────────────────────┴──────────────┴────────────────────────────────────────┘
+#
+# Cross-compilation uses `cross` (https://github.com/cross-rs/cross).
+# All targets install libpulse-dev via the [workspace.metadata.cross.target.*]
+# pre-build hooks in Cargo.toml so that `libpulse-sys`'s build script can
+# always find `libpulse.pc` — even for a check-only run.
+# musl targets cannot link against glibc-backed libpulse.so, so they stop at
+# check.
+
+name: CI – Linux (PulseAudio)
+
+on:
+  push:
+    paths:
+      - "volumecontrol-linux/**"
+      - "volumecontrol-core/**"
+      - ".github/workflows/ci-linux.yml"
+  pull_request:
+    paths:
+      - "volumecontrol-linux/**"
+      - "volumecontrol-core/**"
+      - ".github/workflows/ci-linux.yml"
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ── Native x86_64: check + build + test, with and without pulseaudio ─────────
+  native:
+    name: Native (x86_64-unknown-linux-gnu)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-native-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-native-
+
+      # libpulse-dev depends on libasound2-dev on Ubuntu.
+      - name: Install PulseAudio development libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libpulse-dev libasound2-dev
+
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy (no features)
+        run: >
+          cargo clippy
+          -p volumecontrol-linux
+          --all-targets
+          -- -D warnings
+
+      - name: cargo clippy (pulseaudio feature)
+        run: >
+          cargo clippy
+          -p volumecontrol-linux
+          --features pulseaudio
+          --all-targets
+          -- -D warnings
+
+      - name: cargo check (no features)
+        run: cargo check -p volumecontrol-linux
+
+      - name: cargo check (pulseaudio feature)
+        run: cargo check -p volumecontrol-linux --features pulseaudio
+
+      - name: cargo build (no features)
+        run: cargo build -p volumecontrol-linux
+
+      - name: cargo build (pulseaudio feature)
+        run: cargo build -p volumecontrol-linux --features pulseaudio
+
+      - name: cargo test (no features)
+        run: cargo test -p volumecontrol-linux
+
+      - name: cargo test (pulseaudio feature)
+        run: cargo test -p volumecontrol-linux --features pulseaudio
+
+  # ── Cross-compilation with `cross` ────────────────────────────────────────────
+  #
+  # GNU targets: libpulse-dev is installed for the target arch via dpkg
+  # multi-arch → check + build (with and without pulseaudio feature).
+  #
+  # musl targets: libpulse-dev is installed for the glibc arch so that
+  # `libpulse-sys`'s build script succeeds during check; actual linking is not
+  # possible → check only (with and without pulseaudio feature).
+  cross:
+    name: Cross (${{ matrix.target }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GNU targets: can link libpulse → check + build
+          - target: aarch64-unknown-linux-gnu
+            can_build: true
+          - target: armv7-unknown-linux-gnueabihf
+            can_build: true
+          # musl targets: cannot link libpulse → check only
+          - target: x86_64-unknown-linux-musl
+            can_build: false
+          - target: aarch64-unknown-linux-musl
+            can_build: false
+          - target: armv7-unknown-linux-musleabihf
+            can_build: false
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-
+
+      - name: Install cross
+        run: cargo install cross --locked
+
+      # check always runs regardless of target type
+      - name: cross check (no features)
+        run: >
+          cross check
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+
+      - name: cross check (pulseaudio feature)
+        run: >
+          cross check
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+          --features pulseaudio
+
+      # ── GNU targets only: build with and without the pulseaudio feature ──
+      - name: cross build (no features)
+        if: matrix.can_build
+        run: >
+          cross build
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+
+      - name: cross build (pulseaudio feature)
+        if: matrix.can_build
+        run: >
+          cross build
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+          --features pulseaudio
