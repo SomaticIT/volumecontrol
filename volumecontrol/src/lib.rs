@@ -24,7 +24,7 @@
 
 pub use volumecontrol_core::AudioError;
 
-use volumecontrol_core::AudioDevice as AudioDeviceTrait;
+use volumecontrol_core::AudioDevice as _;
 
 #[cfg(target_os = "linux")]
 use volumecontrol_linux::AudioDevice as Inner;
@@ -57,7 +57,7 @@ impl AudioDevice {
     /// Returns an error if the default device cannot be resolved.
     #[allow(clippy::should_implement_trait)]
     pub fn default() -> Result<Self, AudioError> {
-        <Inner as AudioDeviceTrait>::default().map(Self)
+        Inner::default().map(Self)
     }
 
     /// Returns the audio device identified by `id`.
@@ -67,7 +67,7 @@ impl AudioDevice {
     /// Returns [`AudioError::DeviceNotFound`] if no device with the given
     /// identifier exists, or another error if the lookup fails.
     pub fn from_id(id: &str) -> Result<Self, AudioError> {
-        <Inner as AudioDeviceTrait>::from_id(id).map(Self)
+        Inner::from_id(id).map(Self)
     }
 
     /// Returns the first audio device whose name contains `name`.
@@ -77,7 +77,7 @@ impl AudioDevice {
     /// Returns [`AudioError::DeviceNotFound`] if no matching device is found,
     /// or another error if the lookup fails.
     pub fn from_name(name: &str) -> Result<Self, AudioError> {
-        <Inner as AudioDeviceTrait>::from_name(name).map(Self)
+        Inner::from_name(name).map(Self)
     }
 
     /// Lists all available audio devices as `(id, name)` pairs.
@@ -86,7 +86,7 @@ impl AudioDevice {
     ///
     /// Returns an error if the device list cannot be retrieved.
     pub fn list() -> Result<Vec<(String, String)>, AudioError> {
-        <Inner as AudioDeviceTrait>::list()
+        Inner::list()
     }
 
     /// Returns the current volume level in the range `0..=100`.
