@@ -16,12 +16,16 @@ jobs:
           # 64-bit x86 — primary Windows target.
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
+            virtual_audio: true
           # 32-bit x86 (i386) — WoW64 binaries run on the x64 runner.
           - target: i686-pc-windows-msvc
             runner: windows-latest
-          # ARM64 — runs on a native ARM64 runner.
+            virtual_audio: true
+          # ARM64 — native ARM64 runner; no virtual audio driver release
+          # available for this architecture, so WASAPI tests are build-only.
           - target: aarch64-pc-windows-msvc
             runner: windows-11-arm
+            virtual_audio: false
 
     steps:
       - name: Checkout repository
@@ -31,6 +35,20 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # Install the Virtual Audio Driver on platforms where a signed release is
+      # available (x64 / i386).  This gives WASAPI tests a real audio endpoint.
+      - name: Install Virtual Audio Driver
+        if: matrix.virtual_audio
+        shell: powershell
+        run: |
+          $zip = "$env:TEMP\virtual-audio-driver.zip"
+          $dir = "$env:TEMP\virtual-audio-driver"
+          Invoke-WebRequest `
+            -Uri "https://github.com/VirtualDrivers/Virtual-Audio-Driver/releases/download/25.7.14/Virtual.Audio.Driver.Signed.-.25.7.14.zip" `
+            -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir
+          pnputil /add-driver "$dir\VirtualAudioDriver.inf" /install
 
       # Check that the crate compiles without the wasapi feature (stub path).
       - name: Check (no feature)
@@ -44,9 +62,17 @@ jobs:
       - name: Test (no feature)
         run: cargo test -p volumecontrol-windows --target ${{ matrix.target }}
 
-      # Build and run the real WASAPI tests on the native runner.
+      # Build and run the real WASAPI tests on platforms with a virtual audio
+      # device installed (x64 / i386).
       - name: Test (wasapi feature)
+        if: matrix.virtual_audio
         run: cargo test -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
+
+      # On ARM64 no virtual audio driver is available — only build the test
+      # binary to verify it compiles; skip execution.
+      - name: Build tests (wasapi feature, no execute)
+        if: "!matrix.virtual_audio"
+        run: cargo test -p volumecontrol-windows --features wasapi --target ${{ matrix.target }} --no-run
 
       # Lint with Clippy; all warnings are treated as errors.
       - name: Clippy
