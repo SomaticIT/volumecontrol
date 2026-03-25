@@ -11,17 +11,18 @@ pub(crate) mod wasapi {
     use volumecontrol_core::AudioError;
 
     use windows::Win32::{
-        Devices::Properties::PKEY_Device_FriendlyName,
-        Foundation::BOOL,
+        Devices::FunctionDiscovery::PKEY_Device_FriendlyName,
+        Media::Audio::Endpoints::IAudioEndpointVolume,
         Media::Audio::{
-            eConsole, eRender, IAudioEndpointVolume, IMMDevice, IMMDeviceCollection,
-            IMMDeviceEnumerator, MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
+            eConsole, eRender, IMMDevice, IMMDeviceCollection, IMMDeviceEnumerator,
+            MMDeviceEnumerator, DEVICE_STATE_ACTIVE,
         },
+        System::Com::StructuredStorage::PropVariantToStringAlloc,
         System::Com::{
             CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
             COINIT_MULTITHREADED, STGM_READ,
         },
-        UI::Shell::PropertiesSystem::{IPropertyStore, PropVariantToStringAlloc},
+        UI::Shell::PropertiesSystem::IPropertyStore,
     };
 
     // -------------------------------------------------------------------------
@@ -71,17 +72,23 @@ pub(crate) mod wasapi {
         pub(crate) fn new() -> Result<Self, AudioError> {
             // SAFETY: CoInitializeEx is safe to call from any thread. Passing
             // `None` for the reserved parameter is explicitly documented as
-            // correct.
-            let result = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+            // correct.  In windows 0.62 the function returns an HRESULT value
+            // directly (not wrapped in Result), so we inspect the raw code.
+            let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
 
-            match result {
-                // S_OK or S_FALSE — this thread now owns the COM initialisation.
-                Ok(()) => Ok(Self { owns_init: true }),
-                // RPC_E_CHANGED_MODE: COM was already initialised
-                // with a different apartment model.  We can still use COM;
-                // we must NOT call CoUninitialize on drop.
-                Err(ref e) if e.code().0 == RPC_E_CHANGED_MODE => Ok(Self { owns_init: false }),
-                Err(e) => Err(AudioError::InitializationFailed(e.to_string())),
+            if hr.is_ok() {
+                // S_OK (0x0) — first init; S_FALSE (0x1) — already init'd on
+                // this thread with the same model.  Both require CoUninitialize.
+                Ok(Self { owns_init: true })
+            } else if hr.0 == RPC_E_CHANGED_MODE {
+                // A different apartment model is active on this thread.  We can
+                // still use COM but must NOT call CoUninitialize.
+                Ok(Self { owns_init: false })
+            } else {
+                Err(AudioError::InitializationFailed(format!(
+                    "CoInitializeEx failed: HRESULT 0x{:08X}",
+                    hr.0 as u32
+                )))
             }
         }
     }
@@ -121,8 +128,6 @@ pub(crate) mod wasapi {
 
     /// Returns the string endpoint ID for `device`.
     ///
-    /// The caller is responsible for the device reference lifetime.
-    ///
     /// # Errors
     ///
     /// Returns [`AudioError::InitializationFailed`] if the ID cannot be
@@ -130,7 +135,9 @@ pub(crate) mod wasapi {
     pub(crate) fn device_id(device: &IMMDevice) -> Result<String, AudioError> {
         // SAFETY: IMMDevice::GetId allocates the PWSTR with CoTaskMemAlloc.
         // We convert the wide string to an owned Rust String and then release
-        // the allocation with CoTaskMemFree.
+        // the allocation with CoTaskMemFree.  PWSTR::to_string is unsafe because
+        // it dereferences a raw pointer; it is sound here because the pointer
+        // was just returned by the Windows API and is valid.
         unsafe {
             let pwstr = device
                 .GetId()
@@ -160,16 +167,19 @@ pub(crate) mod wasapi {
         // * GetValue is called with a well-known property key.
         // * PropVariantToStringAlloc allocates its output with CoTaskMemAlloc;
         //   we release it with CoTaskMemFree before returning.
+        // * PWSTR::to_string dereferences a raw pointer that was just returned
+        //   by the Windows API; the pointer is valid for the duration of the
+        //   call.
         unsafe {
             let store: IPropertyStore = device
                 .OpenPropertyStore(STGM_READ)
                 .map_err(|e| AudioError::InitializationFailed(e.to_string()))?;
 
             let pv = store
-                .GetValue(&PKEY_Device_FriendlyName)
+                .GetValue(&raw const PKEY_Device_FriendlyName)
                 .map_err(|e| AudioError::InitializationFailed(e.to_string()))?;
 
-            let pwstr = PropVariantToStringAlloc(&pv)
+            let pwstr = PropVariantToStringAlloc(&raw const pv)
                 .map_err(|e| AudioError::InitializationFailed(e.to_string()))?;
 
             let name = pwstr
@@ -311,8 +321,10 @@ pub(crate) mod wasapi {
     ///
     /// Returns [`AudioError::InitializationFailed`] on COM failure.
     pub(crate) fn endpoint_volume(device: &IMMDevice) -> Result<IAudioEndpointVolume, AudioError> {
-        // SAFETY: Activate is called with CLSCTX_INPROC_SERVER and a type
-        // parameter whose IID is statically known to be correct.
+        // SAFETY: Activate is called with CLSCTX_INPROC_SERVER and the return
+        // type is annotated as IAudioEndpointVolume whose IID is statically
+        // correct.  Passing None for pActivationParams is explicitly permitted
+        // by the WASAPI documentation.
         unsafe {
             device
                 .Activate(CLSCTX_INPROC_SERVER, None)
@@ -348,12 +360,12 @@ pub(crate) mod wasapi {
     pub(crate) fn set_volume(endpoint: &IAudioEndpointVolume, vol: u8) -> Result<(), AudioError> {
         let scalar = f32::from(vol.min(100)) / 100.0_f32;
 
-        // SAFETY: SetMasterVolumeLevelScalar is a simple setter.  Passing
-        // `None` for the event-context GUID is explicitly permitted by the
-        // WASAPI documentation.
+        // SAFETY: SetMasterVolumeLevelScalar is a simple setter.  Passing a
+        // null pointer for pGUIDEventContext is explicitly permitted by the
+        // WASAPI documentation (means "no event context").
         unsafe {
             endpoint
-                .SetMasterVolumeLevelScalar(scalar, None)
+                .SetMasterVolumeLevelScalar(scalar, std::ptr::null())
                 .map_err(|e| AudioError::SetVolumeFailed(e.to_string()))
         }
     }
@@ -364,8 +376,9 @@ pub(crate) mod wasapi {
     ///
     /// Returns [`AudioError::GetMuteFailed`] on COM failure.
     pub(crate) fn get_mute(endpoint: &IAudioEndpointVolume) -> Result<bool, AudioError> {
-        // SAFETY: GetMute is a simple read-only COM call.
-        let b: BOOL = unsafe {
+        // SAFETY: GetMute is a simple read-only COM call.  The returned BOOL
+        // is converted to a Rust bool via as_bool().
+        let b = unsafe {
             endpoint
                 .GetMute()
                 .map_err(|e| AudioError::GetMuteFailed(e.to_string()))?
@@ -380,12 +393,11 @@ pub(crate) mod wasapi {
     ///
     /// Returns [`AudioError::SetMuteFailed`] on COM failure.
     pub(crate) fn set_mute(endpoint: &IAudioEndpointVolume, muted: bool) -> Result<(), AudioError> {
-        // SAFETY: SetMute is a simple setter.  Passing `None` for the
-        // event-context GUID is explicitly permitted by the WASAPI
-        // documentation.
+        // SAFETY: SetMute is a simple setter.  Passing a null pointer for
+        // pGUIDEventContext is explicitly permitted by the WASAPI documentation.
         unsafe {
             endpoint
-                .SetMute(BOOL::from(muted), None)
+                .SetMute(muted, std::ptr::null())
                 .map_err(|e| AudioError::SetMuteFailed(e.to_string()))
         }
     }

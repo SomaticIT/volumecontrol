@@ -14,10 +14,23 @@ volumecontrol-core = { workspace = true }
 version = "0.62"
 optional = true
 features = [
-    "Win32_Devices_Properties",
+    # PKEY_Device_FriendlyName constant
+    "Win32_Devices_FunctionDiscovery",
+    # PROPERTYKEY, STGM_READ
     "Win32_Foundation",
+    # IMMDevice, IMMDeviceEnumerator, IMMDeviceCollection, MMDeviceEnumerator,
+    # eConsole, eRender, DEVICE_STATE_ACTIVE
     "Win32_Media_Audio",
+    # IAudioEndpointVolume
+    "Win32_Media_Audio_Endpoints",
+    # CoInitializeEx, CoUninitialize, CoCreateInstance, CoTaskMemFree, CLSCTX,
+    # COINIT, STGM
     "Win32_System_Com",
+    # PROPVARIANT (needed for IMMDevice::Activate and IPropertyStore::GetValue)
+    "Win32_System_Com_StructuredStorage",
+    # PropVariantToStringAlloc, and enables PROPVARIANT methods
+    "Win32_System_Variant",
+    # IPropertyStore
     "Win32_UI_Shell_PropertiesSystem",
 ]
 
