@@ -10,10 +10,16 @@ repository.workspace = true
 volumecontrol-core = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-volumecontrol-linux = { path = "../volumecontrol-linux" }
+volumecontrol-linux = { path = "../volumecontrol-linux", features = [
+    "pulseaudio",
+] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-volumecontrol-windows = { path = "../volumecontrol-windows" }
+volumecontrol-windows = { path = "../volumecontrol-windows", features = [
+    "wasapi",
+] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-volumecontrol-macos = { path = "../volumecontrol-macos" }
+volumecontrol-macos = { path = "../volumecontrol-macos", features = [
+    "coreaudio",
+] }

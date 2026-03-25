@@ -3,7 +3,21 @@ name: Windows CI
 on:
   push:
     branches: ["main"]
+    paths:
+      - "volumecontrol-windows/**"
+      - "volumecontrol-core/**"
+      - "volumecontrol/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/windows.yml"
   pull_request:
+    paths:
+      - "volumecontrol-windows/**"
+      - "volumecontrol-core/**"
+      - "volumecontrol/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/windows.yml"
 
 jobs:
   windows:
@@ -81,44 +95,74 @@ jobs:
           # Install the virtual audio driver.
           & $nefconc --install-driver --inf-path "$vadDir\Virtual Audio Driver\VirtualAudioDriver.inf"
 
+      # ── volumecontrol-windows ────────────────────────────────────────────────
+
       # Check that the crate compiles without the wasapi feature (stub path).
-      - name: Check (no feature)
+      - name: Check volumecontrol-windows (no feature)
         run: cargo check -p volumecontrol-windows --target ${{ matrix.target }}
 
       # Check that the crate compiles with the real WASAPI backend enabled.
-      - name: Check (wasapi feature)
+      - name: Check volumecontrol-windows (wasapi feature)
         run: cargo check -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
 
       # Build the crate without the wasapi feature.
-      - name: Build (no feature)
+      - name: Build volumecontrol-windows (no feature)
         run: cargo build -p volumecontrol-windows --target ${{ matrix.target }}
 
       # Build the crate with the real WASAPI backend enabled.
-      - name: Build (wasapi feature)
+      - name: Build volumecontrol-windows (wasapi feature)
         run: cargo build -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
 
       # Run the stub-path tests (no real WASAPI calls).
-      - name: Test (no feature)
+      - name: Test volumecontrol-windows (no feature)
         run: cargo test -p volumecontrol-windows --target ${{ matrix.target }}
 
       # Build and run the real WASAPI tests on x64 only (virtual audio device
       # is only installed for that target).
-      - name: Test (wasapi feature)
+      - name: Test volumecontrol-windows (wasapi feature)
         if: matrix.virtual_audio
         run: cargo test -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
 
       # On i686 and ARM64 no virtual audio driver is available — only build the
       # test binary to verify it compiles; skip execution.
-      - name: Build tests (wasapi feature, no execute)
+      - name: Build tests volumecontrol-windows (wasapi feature, no execute)
         if: "!matrix.virtual_audio"
         run: cargo test -p volumecontrol-windows --features wasapi --target ${{ matrix.target }} --no-run
 
       # Lint with Clippy; all warnings are treated as errors.
-      - name: Clippy
+      - name: Clippy volumecontrol-windows
         run: >
           cargo clippy
           -p volumecontrol-windows
           --all-targets
           --all-features
+          --target ${{ matrix.target }}
+          -- -D warnings
+
+      # ── volumecontrol wrapper ────────────────────────────────────────────────
+      # The wrapper has no user-visible features; the platform backend is
+      # selected and enabled automatically.
+
+      - name: Check volumecontrol
+        run: cargo check -p volumecontrol --target ${{ matrix.target }}
+
+      - name: Build volumecontrol
+        run: cargo build -p volumecontrol --target ${{ matrix.target }}
+
+      # Run integration tests on x64 only (virtual audio device installed).
+      - name: Test volumecontrol
+        if: matrix.virtual_audio
+        run: cargo test -p volumecontrol --target ${{ matrix.target }}
+
+      # On i686 and ARM64 only build the test binary; skip execution.
+      - name: Build tests volumecontrol (no execute)
+        if: "!matrix.virtual_audio"
+        run: cargo test -p volumecontrol --target ${{ matrix.target }} --no-run
+
+      - name: Clippy volumecontrol
+        run: >
+          cargo clippy
+          -p volumecontrol
+          --all-targets
           --target ${{ matrix.target }}
           -- -D warnings

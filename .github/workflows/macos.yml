@@ -42,22 +42,41 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: cargo check (no features)
+      # ── volumecontrol-macos ──────────────────────────────────────────────────
+
+      - name: cargo check volumecontrol-macos (no features)
         run: cargo check -p volumecontrol-macos --target ${{ matrix.target }}
 
-      - name: cargo check (coreaudio feature)
+      - name: cargo check volumecontrol-macos (coreaudio feature)
         run: cargo check -p volumecontrol-macos --features coreaudio --target ${{ matrix.target }}
 
-      - name: cargo test (no features)
+      - name: cargo test volumecontrol-macos (no features)
         run: cargo test -p volumecontrol-macos --target ${{ matrix.target }}
 
-      - name: cargo test (coreaudio feature)
+      - name: cargo test volumecontrol-macos (coreaudio feature)
         run: cargo test -p volumecontrol-macos --features coreaudio --target ${{ matrix.target }}
 
-      - name: cargo clippy (coreaudio feature)
+      - name: cargo clippy volumecontrol-macos (coreaudio feature)
         run: >
           cargo clippy -p volumecontrol-macos
           --features coreaudio
+          --target ${{ matrix.target }}
+          --all-targets
+          -- -D warnings
+
+      # ── volumecontrol wrapper ────────────────────────────────────────────────
+      # The wrapper has no user-visible features; the platform backend is
+      # selected and enabled automatically.
+
+      - name: cargo check volumecontrol
+        run: cargo check -p volumecontrol --target ${{ matrix.target }}
+
+      - name: cargo test volumecontrol
+        run: cargo test -p volumecontrol --target ${{ matrix.target }}
+
+      - name: cargo clippy volumecontrol
+        run: >
+          cargo clippy -p volumecontrol
           --target ${{ matrix.target }}
           --all-targets
           -- -D warnings
