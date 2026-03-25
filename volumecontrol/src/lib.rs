@@ -16,7 +16,7 @@
 //! use volumecontrol::AudioDevice;
 //!
 //! fn main() -> Result<(), volumecontrol::AudioError> {
-//!     let device = AudioDevice::default()?;
+//!     let device = AudioDevice::from_default()?;
 //!     println!("Current volume: {}%", device.get_vol()?);
 //!     Ok(())
 //! }
@@ -55,9 +55,8 @@ impl AudioDevice {
     /// # Errors
     ///
     /// Returns an error if the default device cannot be resolved.
-    #[allow(clippy::should_implement_trait)]
-    pub fn default() -> Result<Self, AudioError> {
-        Inner::default().map(Self)
+    pub fn from_default() -> Result<Self, AudioError> {
+        Inner::from_default().map(Self)
     }
 
     /// Returns the audio device identified by `id`.
@@ -162,7 +161,7 @@ mod tests {
     /// The default device must have a non-empty id and name.
     #[test]
     fn default_device_id_and_name_nonempty() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         assert!(!device.id().is_empty(), "device id must not be empty");
         assert!(!device.name().is_empty(), "device name must not be empty");
     }
@@ -170,7 +169,7 @@ mod tests {
     /// The default device must be resolvable when an audio device is present.
     #[test]
     fn default_returns_ok() {
-        let result = AudioDevice::default();
+        let result = AudioDevice::from_default();
         assert!(result.is_ok(), "expected Ok, got {result:?}");
     }
 
@@ -230,7 +229,7 @@ mod tests {
     /// The reported volume must always be within the valid `0..=100` range.
     #[test]
     fn get_vol_returns_valid_range() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let vol = device.get_vol().expect("get_vol()");
         assert!(vol <= 100, "volume must be in 0..=100, got {vol}");
     }
@@ -241,7 +240,7 @@ mod tests {
     /// Run with `--test-threads=1` to avoid races.
     #[test]
     fn set_vol_changes_volume() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let original = device.get_vol().expect("get_vol()");
         let target: u8 = if original >= 50 { 30 } else { 70 };
         device.set_vol(target).expect("set_vol()");
@@ -260,7 +259,7 @@ mod tests {
     /// Run with `--test-threads=1` to avoid races.
     #[test]
     fn set_mute_changes_mute_state() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let original = device.is_mute().expect("is_mute()");
         let target = !original;
         device.set_mute(target).expect("set_mute()");

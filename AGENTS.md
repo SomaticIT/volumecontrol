@@ -40,7 +40,7 @@ Every platform crate exposes an `AudioDevice` struct that implements
 
 ```rust
 pub trait AudioDevice: Sized {
-    fn default()              -> Result<Self, AudioError>;
+    fn from_default()             -> Result<Self, AudioError>;
     fn from_id(id: &str)      -> Result<Self, AudioError>;
     fn from_name(name: &str)  -> Result<Self, AudioError>;
     fn list()                 -> Result<Vec<(String, String)>, AudioError>;

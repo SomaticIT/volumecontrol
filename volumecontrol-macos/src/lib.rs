@@ -42,7 +42,7 @@ impl AudioDevice {
 }
 
 impl AudioDeviceTrait for AudioDevice {
-    fn default() -> Result<Self, AudioError> {
+    fn from_default() -> Result<Self, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
             let raw_id = internal::get_default_device_id()?;
@@ -183,7 +183,7 @@ mod tests {
     #[cfg(not(feature = "coreaudio"))]
     #[test]
     fn default_returns_unsupported_without_feature() {
-        let result = AudioDevice::default();
+        let result = AudioDevice::from_default();
         assert!(matches!(result.unwrap_err(), AudioError::Unsupported));
     }
 
@@ -215,7 +215,7 @@ mod tests {
     #[cfg(all(feature = "coreaudio", target_os = "macos"))]
     #[test]
     fn default_returns_ok() {
-        let device = AudioDevice::default();
+        let device = AudioDevice::from_default();
         assert!(device.is_ok(), "expected Ok, got {device:?}");
     }
 
@@ -238,7 +238,7 @@ mod tests {
     #[test]
     fn from_id_valid_id_returns_ok() {
         // Use the default device's id to look up via `from_id`.
-        let default_device = AudioDevice::default().expect("default()");
+        let default_device = AudioDevice::from_default().expect("from_default()");
         let found = AudioDevice::from_id(default_device.id());
         assert!(found.is_ok(), "from_id with valid id should succeed");
         assert_eq!(found.unwrap().id(), default_device.id());
@@ -259,7 +259,7 @@ mod tests {
     fn from_name_partial_match_returns_ok() {
         // Build a partial name from the first few characters of the default
         // device name to guarantee a match without hard-coding a device name.
-        let default_device = AudioDevice::default().expect("default()");
+        let default_device = AudioDevice::from_default().expect("from_default()");
         let partial: String = default_device.name().chars().take(3).collect();
         let found = AudioDevice::from_name(&partial);
         assert!(
@@ -281,7 +281,7 @@ mod tests {
     #[cfg(all(feature = "coreaudio", target_os = "macos"))]
     #[test]
     fn get_vol_returns_valid_range() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let vol = device.get_vol().expect("get_vol()");
         assert!(vol <= 100, "volume must be in 0..=100, got {vol}");
     }
@@ -289,7 +289,7 @@ mod tests {
     #[cfg(all(feature = "coreaudio", target_os = "macos"))]
     #[test]
     fn set_vol_roundtrip() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let original = device.get_vol().expect("get_vol()");
         device.set_vol(original).expect("set_vol()");
         let after = device.get_vol().expect("get_vol() after set");
@@ -303,7 +303,7 @@ mod tests {
     #[cfg(all(feature = "coreaudio", target_os = "macos"))]
     #[test]
     fn set_mute_roundtrip() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let original = device.is_mute().expect("is_mute()");
         device.set_mute(original).expect("set_mute()");
         let after = device.is_mute().expect("is_mute() after set");

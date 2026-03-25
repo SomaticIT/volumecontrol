@@ -10,7 +10,7 @@ pub trait AudioDevice: Sized {
     /// # Errors
     ///
     /// Returns an error if the default device cannot be resolved.
-    fn default() -> Result<Self, AudioError>;
+    fn from_default() -> Result<Self, AudioError>;
 
     /// Returns the audio device identified by `id`.
     ///

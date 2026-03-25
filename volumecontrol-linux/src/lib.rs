@@ -19,7 +19,7 @@ pub struct AudioDevice {
 }
 
 impl AudioDeviceTrait for AudioDevice {
-    fn default() -> Result<Self, AudioError> {
+    fn from_default() -> Result<Self, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
             let sink_name = pulse::default_sink_name()?;
@@ -133,7 +133,7 @@ mod tests {
     #[cfg(not(feature = "pulseaudio"))]
     #[test]
     fn default_returns_unsupported_without_feature() {
-        let result = AudioDevice::default();
+        let result = AudioDevice::from_default();
         assert!(matches!(result.unwrap_err(), AudioError::Unsupported));
     }
 
@@ -243,16 +243,16 @@ mod tests {
         }
     }
 
-    /// `default()` must either succeed, return `DeviceNotFound` (no default
+    /// `from_default()` must either succeed, return `DeviceNotFound` (no default
     /// sink configured), or return `InitializationFailed` (no server).
     #[cfg(feature = "pulseaudio")]
     #[test]
     fn default_returns_ok_or_known_error() {
-        let result = AudioDevice::default();
+        let result = AudioDevice::from_default();
         match &result {
             Ok(_) => {}
             Err(AudioError::InitializationFailed(_)) | Err(AudioError::DeviceNotFound) => {}
-            Err(e) => panic!("unexpected error from default(): {e:?}"),
+            Err(e) => panic!("unexpected error from from_default(): {e:?}"),
         }
     }
 
@@ -310,7 +310,7 @@ mod tests {
     #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
     #[test]
     fn default_returns_ok() {
-        let device = AudioDevice::default();
+        let device = AudioDevice::from_default();
         assert!(device.is_ok(), "expected Ok, got {device:?}");
     }
 
@@ -334,7 +334,7 @@ mod tests {
     #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
     #[test]
     fn from_id_valid_id_returns_ok() {
-        let default_device = AudioDevice::default().expect("default()");
+        let default_device = AudioDevice::from_default().expect("from_default()");
         let found_device = match AudioDevice::from_id(default_device.id()) {
             Ok(d) => d,
             Err(e) => panic!("from_id with valid id should succeed, got {e:?}"),
@@ -357,7 +357,7 @@ mod tests {
     #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
     #[test]
     fn from_name_partial_match_returns_ok() {
-        let default_device = AudioDevice::default().expect("default()");
+        let default_device = AudioDevice::from_default().expect("from_default()");
         let partial: String = default_device.name().chars().take(3).collect();
         let found = AudioDevice::from_name(&partial);
         assert!(
@@ -381,7 +381,7 @@ mod tests {
     #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
     #[test]
     fn get_vol_returns_valid_range() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let vol = device.get_vol().expect("get_vol()");
         assert!(vol <= 100, "volume must be in 0..=100, got {vol}");
     }
@@ -393,7 +393,7 @@ mod tests {
     #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
     #[test]
     fn set_vol_changes_volume() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let original = device.get_vol().expect("get_vol()");
         // Choose a target value that is clearly different from the original.
         let target: u8 = if original >= 50 { 30 } else { 70 };
@@ -415,7 +415,7 @@ mod tests {
     #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
     #[test]
     fn set_mute_changes_mute_state() {
-        let device = AudioDevice::default().expect("default()");
+        let device = AudioDevice::from_default().expect("from_default()");
         let original = device.is_mute().expect("is_mute()");
         // Toggle to the opposite state.
         let target = !original;

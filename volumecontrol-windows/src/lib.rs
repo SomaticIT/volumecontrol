@@ -26,7 +26,7 @@ impl AudioDeviceTrait for AudioDevice {
     /// initialised or if the default device cannot be resolved.
     /// Returns [`AudioError::Unsupported`] when the `wasapi` feature is
     /// not enabled.
-    fn default() -> Result<Self, AudioError> {
+    fn from_default() -> Result<Self, AudioError> {
         #[cfg(feature = "wasapi")]
         {
             let _com = internal::wasapi::ComGuard::new()?;
@@ -241,7 +241,7 @@ mod tests {
     #[cfg(not(feature = "wasapi"))]
     fn default_returns_unsupported_without_feature() {
         assert!(matches!(
-            AudioDevice::default(),
+            AudioDevice::from_default(),
             Err(AudioError::Unsupported)
         ));
     }
@@ -374,7 +374,7 @@ mod tests {
     #[test]
     #[cfg(feature = "wasapi")]
     fn default_device_always_found() {
-        AudioDevice::default().expect("default() failed — no default audio device on Windows");
+        AudioDevice::from_default().expect("from_default() failed — no default audio device on Windows");
     }
 
     /// `get_vol` must return a value in `0..=100`; `set_vol` to a different
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     #[cfg(feature = "wasapi")]
     fn default_device_volume_round_trip() {
-        let device = AudioDevice::default().expect("default() failed");
+        let device = AudioDevice::from_default().expect("from_default() failed");
 
         let original_vol = device.get_vol().expect("get_vol() failed");
         assert!(
@@ -408,7 +408,7 @@ mod tests {
     #[test]
     #[cfg(feature = "wasapi")]
     fn default_device_mute_round_trip() {
-        let device = AudioDevice::default().expect("default() failed");
+        let device = AudioDevice::from_default().expect("from_default() failed");
 
         let original = device.is_mute().expect("is_mute() failed");
 

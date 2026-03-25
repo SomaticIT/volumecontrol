@@ -60,7 +60,7 @@ volumecontrol/                   ← workspace root
 use volumecontrol::AudioDevice;
 
 fn main() -> Result<(), volumecontrol::AudioError> {
-    let device = AudioDevice::default()?;
+    let device = AudioDevice::from_default()?;
     println!("Current volume: {}%", device.get_vol()?);
     Ok(())
 }
@@ -113,7 +113,7 @@ cargo build
 ```rust
 use volumecontrol::AudioDevice;
 
-let device = AudioDevice::default()?;
+let device = AudioDevice::from_default()?;
 ```
 
 ### Look up a device by ID or name
