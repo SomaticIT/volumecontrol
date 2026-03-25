@@ -17,7 +17,6 @@ jobs:
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
             virtual_audio: true
-            nefcon_arch: x64
           # 32-bit x86 (i386) — WoW64 binaries run on the x64 runner.
           # Virtual audio driver cannot be installed reliably on x86, so
           # WASAPI tests are build-only (same as ARM64).
@@ -71,7 +70,7 @@ jobs:
             -Uri "https://github.com/nefarius/nefcon/releases/download/v1.17.40/nefcon_v1.17.40.zip" `
             -OutFile $nefconZip
           Expand-Archive -Path $nefconZip -DestinationPath $nefconDir
-          $nefconc = "$nefconDir\${{ matrix.nefcon_arch }}\nefconc.exe"
+          $nefconc = "$nefconDir\x64\nefconc.exe"
 
           # Create the virtual audio device node.
           & $nefconc --create-device-node `
