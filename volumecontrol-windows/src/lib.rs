@@ -311,8 +311,8 @@ mod tests {
 
     // ------------------------------------------------------------------
     // Real-world WASAPI tests — only compiled and run with `wasapi` feature.
-    // These run on Windows CI runners that have real audio hardware, or skip
-    // gracefully when no audio endpoint is present.
+    // These run on Windows CI runners that always have at least one audio
+    // endpoint available.
     // ------------------------------------------------------------------
 
     /// A device ID that is guaranteed to not match any real WASAPI endpoint.
@@ -353,80 +353,72 @@ mod tests {
         );
     }
 
-    /// `list()` must not panic; it may return an empty `Vec` or an error on
-    /// machines with no audio hardware.
+    /// On Windows there is always at least one audio render endpoint; `list()`
+    /// must succeed and return a non-empty `Vec`.
     #[test]
     #[cfg(feature = "wasapi")]
-    fn list_does_not_panic() {
-        let result = AudioDevice::list();
+    fn list_returns_non_empty_vec() {
+        let devices = AudioDevice::list().expect("list() failed on Windows");
         assert!(
-            result.is_ok() || matches!(result, Err(AudioError::InitializationFailed(_))),
-            "unexpected error from list(): {result:?}"
+            !devices.is_empty(),
+            "list() returned an empty Vec on Windows"
         );
     }
 
-    /// `default()` must not panic; a missing audio device yields a known error.
+    /// On Windows there is always a default audio render endpoint; `default()`
+    /// must succeed.
     #[test]
     #[cfg(feature = "wasapi")]
-    fn default_does_not_panic() {
-        let result = AudioDevice::default();
-        assert!(
-            result.is_ok()
-                || matches!(
-                    result,
-                    Err(AudioError::DeviceNotFound | AudioError::InitializationFailed(_))
-                ),
-            "unexpected error from default(): {result:?}"
-        );
+    fn default_device_always_found() {
+        AudioDevice::default().expect("default() failed — no default audio device on Windows");
     }
 
-    /// If a default render endpoint is available, `get_vol` must return a value
-    /// in `0..=100` and `set_vol` must accept it back without error.
+    /// `get_vol` must return a value in `0..=100`; `set_vol` to a different
+    /// level must be reflected by the next `get_vol` call.  The original volume
+    /// is restored when the test finishes.
     #[test]
     #[cfg(feature = "wasapi")]
     fn default_device_volume_round_trip() {
-        let device = match AudioDevice::default() {
-            Ok(d) => d,
-            Err(_) => return, // No audio hardware on this runner — skip.
-        };
+        let device = AudioDevice::default().expect("default() failed");
 
-        let original_vol = match device.get_vol() {
-            Ok(v) => v,
-            Err(_) => return,
-        };
+        let original_vol = device.get_vol().expect("get_vol() failed");
         assert!(
             original_vol <= 100,
-            "get_vol returned {original_vol}, which is out of range"
+            "get_vol returned {original_vol}, out of range"
         );
 
-        // Writing the same value back should be a no-op.
-        let _ = device.set_vol(original_vol);
+        // Pick a target volume that differs from the current one.
+        let target_vol: u8 = if original_vol >= 50 { 25 } else { 75 };
 
-        if let Ok(v) = device.get_vol() {
-            assert!(v <= 100, "get_vol after set_vol returned {v}, out of range");
-        }
+        device.set_vol(target_vol).expect("set_vol() failed");
+
+        let new_vol = device.get_vol().expect("get_vol() after set_vol() failed");
+        assert_eq!(new_vol, target_vol, "volume did not change to {target_vol}");
+
+        // Restore original volume — best-effort; ignore errors on cleanup.
+        let _ = device.set_vol(original_vol);
     }
 
-    /// If a default render endpoint is available, `is_mute`/`set_mute` must
-    /// round-trip: restoring the original mute state must succeed.
+    /// `set_mute(!original)` must flip the mute state; the change must be
+    /// visible via `is_mute`.  The original state is restored afterwards.
     #[test]
     #[cfg(feature = "wasapi")]
     fn default_device_mute_round_trip() {
-        let device = match AudioDevice::default() {
-            Ok(d) => d,
-            Err(_) => return,
-        };
+        let device = AudioDevice::default().expect("default() failed");
 
-        let original = match device.is_mute() {
-            Ok(m) => m,
-            Err(_) => return,
-        };
+        let original = device.is_mute().expect("is_mute() failed");
 
-        // Restore to original state — test is idempotent on real hardware.
+        // Toggle to the opposite state.
+        device.set_mute(!original).expect("set_mute() failed");
+
+        let toggled = device.is_mute().expect("is_mute() after set_mute() failed");
+        assert_eq!(
+            toggled, !original,
+            "mute state did not toggle to {}",
+            !original
+        );
+
+        // Restore — best-effort; ignore errors on cleanup.
         let _ = device.set_mute(original);
-
-        if let Ok(m) = device.is_mute() {
-            assert_eq!(m, original, "mute state changed after restoring it");
-        }
     }
 }
