@@ -48,10 +48,28 @@ pub trait AudioDevice: Sized {
     fn set_vol(&self, vol: u8)-> Result<(), AudioError>;
     fn is_mute(&self)         -> Result<bool, AudioError>;
     fn set_mute(&self, muted: bool) -> Result<(), AudioError>;
+    fn id(&self)              -> &str;
+    fn name(&self)            -> &str;
 }
 ```
 
 `list()` returns `(id, name)` pairs.  Volume is always in the range `0..=100`.
+
+`id()` returns the platform-specific unique identifier for the device — the same
+string that `list()` surfaces as the first element of each pair and that
+`from_id()` accepts.  The value is never empty.
+
+`name()` returns the human-readable display name for the device — the same
+string that `list()` surfaces as the second element of each pair and that
+`from_name()` uses for substring matching.  The value is never empty.
+
+Platform-specific identifier formats:
+
+| Platform | `id()` format                                      | `name()` format              |
+|----------|----------------------------------------------------|------------------------------|
+| Linux    | PulseAudio sink name (e.g. `alsa_output.pci-…`)    | PulseAudio sink description  |
+| Windows  | WASAPI endpoint ID (e.g. `{0.0.0.00000000}.{…}`)  | WASAPI endpoint friendly name |
+| macOS    | CoreAudio device UID (numeric string, e.g. `"73"`) | CoreAudio device name        |
 
 ---
 

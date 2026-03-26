@@ -1,6 +1,14 @@
 mod internal;
 
+use std::fmt;
+
 use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
+
+#[cfg(feature = "wasapi")]
+use std::sync::Mutex;
+
+#[cfg(feature = "wasapi")]
+use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
 
 /// Represents a WASAPI audio output device (Windows).
 ///
@@ -9,12 +17,109 @@ use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
 /// Real WASAPI integration requires the `wasapi` feature and must be built
 /// for a Windows target.  Without the feature every method returns
 /// [`AudioError::Unsupported`].
-#[derive(Debug)]
+///
+/// # Thread safety
+///
+/// `AudioDevice` is [`Send`] because all COM interface pointers in the
+/// `windows` crate are `Send + Sync`: `AddRef` / `Release` are guaranteed to
+/// be thread-safe by the COM specification, and `windows-rs` marks every COM
+/// interface accordingly.  COM is initialised with `COINIT_MULTITHREADED` (the
+/// multi-threaded apartment), so the cached endpoint can be used from any
+/// thread in the process without cross-apartment marshalling.
 pub struct AudioDevice {
     /// WASAPI endpoint identifier (GUID string).
     id: String,
     /// Friendly device name.
     name: String,
+    /// Cached [`IAudioEndpointVolume`] interface.
+    ///
+    /// Wrapped in a [`Mutex`] to allow transparent re-initialisation on
+    /// `AUDCLNT_E_DEVICE_INVALIDATED` errors using only a shared reference
+    /// (`&self`).  Only present when the `wasapi` feature is enabled.
+    #[cfg(feature = "wasapi")]
+    endpoint: Mutex<IAudioEndpointVolume>,
+}
+
+impl fmt::Debug for AudioDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // The `endpoint` field (a COM interface pointer) is intentionally
+        // omitted: it contains no useful human-readable information and
+        // exposing raw COM interface addresses in debug output would be
+        // confusing.  `finish_non_exhaustive` signals that the struct has
+        // additional fields.
+        f.debug_struct("AudioDevice")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "wasapi")]
+impl AudioDevice {
+    /// Calls `op` with the cached [`IAudioEndpointVolume`], retrying once
+    /// after an automatic cache refresh if the endpoint signals
+    /// [`EndpointError::DeviceInvalidated`] (`AUDCLNT_E_DEVICE_INVALIDATED`).
+    ///
+    /// A [`ComGuard`] is created for the duration of the call to ensure COM is
+    /// initialised on the calling thread.
+    ///
+    /// # Errors
+    ///
+    /// - On `DeviceInvalidated` the cache is refreshed via
+    ///   [`try_refresh_endpoint`]; if the refresh itself fails, that error is
+    ///   returned.  If the retry still returns `DeviceInvalidated` (device
+    ///   disappeared between calls) `AudioError::DeviceNotFound` is returned.
+    /// - On any other [`EndpointError::Error`] the wrapped [`AudioError`] is
+    ///   propagated unchanged.
+    ///
+    /// [`ComGuard`]: internal::wasapi::ComGuard
+    /// [`try_refresh_endpoint`]: AudioDevice::try_refresh_endpoint
+    fn with_endpoint<T>(
+        &self,
+        op: impl Fn(&IAudioEndpointVolume) -> Result<T, internal::wasapi::EndpointError>,
+    ) -> Result<T, AudioError> {
+        let _com = internal::wasapi::ComGuard::new()?;
+        match op(&self.endpoint.lock().expect("endpoint lock poisoned")) {
+            Ok(v) => Ok(v),
+            Err(internal::wasapi::EndpointError::Error(e)) => Err(e),
+            Err(internal::wasapi::EndpointError::DeviceInvalidated) => {
+                // AUDCLNT_E_DEVICE_INVALIDATED — refresh cache and retry once.
+                self.try_refresh_endpoint()?;
+                match op(&self.endpoint.lock().expect("endpoint lock poisoned")) {
+                    Ok(v) => Ok(v),
+                    Err(internal::wasapi::EndpointError::Error(e)) => Err(e),
+                    // Still invalidated after a fresh endpoint: device is gone.
+                    Err(internal::wasapi::EndpointError::DeviceInvalidated) => {
+                        Err(AudioError::DeviceNotFound)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Re-resolves the device by its cached ID and replaces the stored
+    /// [`IAudioEndpointVolume`] with a freshly activated one.
+    ///
+    /// Called by [`with_endpoint`] when an endpoint operation returns
+    /// [`EndpointError::DeviceInvalidated`]
+    /// (`AUDCLNT_E_DEVICE_INVALIDATED`).
+    /// The caller is responsible for ensuring COM is already initialised on the
+    /// current thread (i.e. a [`ComGuard`] is alive in the calling scope).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::DeviceNotFound`] if the device no longer exists,
+    /// or [`AudioError::InitializationFailed`] on other COM failures.
+    ///
+    /// [`with_endpoint`]: AudioDevice::with_endpoint
+    /// [`ComGuard`]: internal::wasapi::ComGuard
+    fn try_refresh_endpoint(&self) -> Result<(), AudioError> {
+        let enumerator = internal::wasapi::create_enumerator()?;
+        let device = internal::wasapi::get_device_by_id(&enumerator, &self.id)?;
+        let new_endpoint = internal::wasapi::endpoint_volume(&device)?;
+        *self.endpoint.lock().expect("endpoint lock poisoned") = new_endpoint;
+        Ok(())
+    }
 }
 
 impl AudioDeviceTrait for AudioDevice {
@@ -34,7 +139,12 @@ impl AudioDeviceTrait for AudioDevice {
             let device = internal::wasapi::get_default_device(&enumerator)?;
             let id = internal::wasapi::device_id(&device)?;
             let name = internal::wasapi::device_name(&device)?;
-            Ok(Self { id, name })
+            let endpoint = internal::wasapi::endpoint_volume(&device)?;
+            Ok(Self {
+                id,
+                name,
+                endpoint: Mutex::new(endpoint),
+            })
         }
         #[cfg(not(feature = "wasapi"))]
         Err(AudioError::Unsupported)
@@ -58,9 +168,11 @@ impl AudioDeviceTrait for AudioDevice {
             let device = internal::wasapi::get_device_by_id(&enumerator, id)?;
             let resolved_id = internal::wasapi::device_id(&device)?;
             let name = internal::wasapi::device_name(&device)?;
+            let endpoint = internal::wasapi::endpoint_volume(&device)?;
             Ok(Self {
                 id: resolved_id,
                 name,
+                endpoint: Mutex::new(endpoint),
             })
         }
         #[cfg(not(feature = "wasapi"))]
@@ -93,9 +205,14 @@ impl AudioDeviceTrait for AudioDevice {
                 .find(|(_, n)| n.to_lowercase().contains(&needle))
                 .ok_or(AudioError::DeviceNotFound)?;
 
+            // Re-resolve the IMMDevice from its ID to activate the endpoint.
+            let device = internal::wasapi::get_device_by_id(&enumerator, &id)?;
+            let endpoint = internal::wasapi::endpoint_volume(&device)?;
+
             Ok(Self {
                 id,
                 name: matched_name,
+                endpoint: Mutex::new(endpoint),
             })
         }
         #[cfg(not(feature = "wasapi"))]
@@ -137,11 +254,7 @@ impl AudioDeviceTrait for AudioDevice {
     fn get_vol(&self) -> Result<u8, AudioError> {
         #[cfg(feature = "wasapi")]
         {
-            let _com = internal::wasapi::ComGuard::new()?;
-            let enumerator = internal::wasapi::create_enumerator()?;
-            let device = internal::wasapi::get_device_by_id(&enumerator, &self.id)?;
-            let endpoint = internal::wasapi::endpoint_volume(&device)?;
-            internal::wasapi::get_volume(&endpoint)
+            self.with_endpoint(internal::wasapi::get_volume)
         }
         #[cfg(not(feature = "wasapi"))]
         Err(AudioError::Unsupported)
@@ -160,11 +273,7 @@ impl AudioDeviceTrait for AudioDevice {
     fn set_vol(&self, vol: u8) -> Result<(), AudioError> {
         #[cfg(feature = "wasapi")]
         {
-            let _com = internal::wasapi::ComGuard::new()?;
-            let enumerator = internal::wasapi::create_enumerator()?;
-            let device = internal::wasapi::get_device_by_id(&enumerator, &self.id)?;
-            let endpoint = internal::wasapi::endpoint_volume(&device)?;
-            internal::wasapi::set_volume(&endpoint, vol)
+            self.with_endpoint(|ep| internal::wasapi::set_volume(ep, vol))
         }
         #[cfg(not(feature = "wasapi"))]
         {
@@ -184,11 +293,7 @@ impl AudioDeviceTrait for AudioDevice {
     fn is_mute(&self) -> Result<bool, AudioError> {
         #[cfg(feature = "wasapi")]
         {
-            let _com = internal::wasapi::ComGuard::new()?;
-            let enumerator = internal::wasapi::create_enumerator()?;
-            let device = internal::wasapi::get_device_by_id(&enumerator, &self.id)?;
-            let endpoint = internal::wasapi::endpoint_volume(&device)?;
-            internal::wasapi::get_mute(&endpoint)
+            self.with_endpoint(internal::wasapi::get_mute)
         }
         #[cfg(not(feature = "wasapi"))]
         Err(AudioError::Unsupported)
@@ -206,11 +311,7 @@ impl AudioDeviceTrait for AudioDevice {
     fn set_mute(&self, muted: bool) -> Result<(), AudioError> {
         #[cfg(feature = "wasapi")]
         {
-            let _com = internal::wasapi::ComGuard::new()?;
-            let enumerator = internal::wasapi::create_enumerator()?;
-            let device = internal::wasapi::get_device_by_id(&enumerator, &self.id)?;
-            let endpoint = internal::wasapi::endpoint_volume(&device)?;
-            internal::wasapi::set_mute(&endpoint, muted)
+            self.with_endpoint(|ep| internal::wasapi::set_mute(ep, muted))
         }
         #[cfg(not(feature = "wasapi"))]
         {

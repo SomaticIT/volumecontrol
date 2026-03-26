@@ -127,11 +127,35 @@ impl AudioDevice {
     }
 
     /// Returns the unique identifier for this device.
+    ///
+    /// The value is the same opaque string that [`Self::list`] yields as the
+    /// first element of each `(id, name)` pair and that [`Self::from_id`]
+    /// accepts as its argument.  It is guaranteed to be non-empty.
+    ///
+    /// # Platform-specific formats
+    ///
+    /// | Platform | Format                                                  |
+    /// |----------|---------------------------------------------------------|
+    /// | Linux    | PulseAudio sink name (e.g. `alsa_output.pci-0000_…`)    |
+    /// | Windows  | WASAPI endpoint ID (e.g. `{0.0.0.00000000}.{…}`)       |
+    /// | macOS    | CoreAudio device UID (numeric string, e.g. `"73"`)      |
     pub fn id(&self) -> &str {
         self.0.id()
     }
 
-    /// Returns the human-readable name of this device.
+    /// Returns the human-readable display name of this device.
+    ///
+    /// The value is the same string that [`Self::list`] yields as the second
+    /// element of each `(id, name)` pair and that [`Self::from_name`] uses for
+    /// substring matching.  It is guaranteed to be non-empty.
+    ///
+    /// # Platform-specific formats
+    ///
+    /// | Platform | Format                                                  |
+    /// |----------|---------------------------------------------------------|
+    /// | Linux    | PulseAudio sink description (e.g. `"Built-in Audio"`)   |
+    /// | Windows  | WASAPI endpoint friendly name (e.g. `"Speakers"`)       |
+    /// | macOS    | CoreAudio device name (e.g. `"MacBook Pro Speakers"`)   |
     pub fn name(&self) -> &str {
         self.0.name()
     }

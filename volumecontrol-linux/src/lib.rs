@@ -1,4 +1,9 @@
+use std::fmt;
+
 use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
+
+#[cfg(feature = "pulseaudio")]
+use std::{cell::RefCell, rc::Rc};
 
 #[cfg(feature = "pulseaudio")]
 mod pulse;
@@ -10,23 +15,66 @@ mod pulse;
 /// Real PulseAudio integration requires the `pulseaudio` feature and the
 /// `libpulse-dev` system package.  Without the feature every method returns
 /// [`AudioError::Unsupported`].
-#[derive(Debug)]
+///
+/// # Thread safety
+///
+/// When the `pulseaudio` feature is enabled, `AudioDevice` is **not** `Send`
+/// because it holds a cached PulseAudio connection ([`Mainloop`] and
+/// [`Context`] from `libpulse-binding` are `!Send`).  Use on a single thread
+/// only.  A threaded-mainloop wrapper that restores `Send + Sync` may be
+/// added in a future release.
 pub struct AudioDevice {
     /// PulseAudio sink name used as the unique device identifier.
     id: String,
     /// Human-readable sink description.
     name: String,
+    /// Cached PulseAudio connection, lazily initialised on first use and
+    /// reconnected automatically after a server disconnect.
+    ///
+    /// `None` only when the struct is built directly in tests (bypassing the
+    /// constructors); in that case the first method call will try to connect.
+    #[cfg(feature = "pulseaudio")]
+    conn: Rc<RefCell<Option<pulse::PulseConnection>>>,
+}
+
+impl fmt::Debug for AudioDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AudioDevice")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .finish_non_exhaustive()
+    }
+}
+
+#[cfg(feature = "pulseaudio")]
+impl AudioDevice {
+    /// Returns a mutable reference to the cached [`pulse::PulseConnection`],
+    /// creating a fresh connection if the slot is empty.
+    ///
+    /// Each [`pulse::PulseConnection`] method already calls `ensure_ready()`
+    /// internally, so callers do not need to handle reconnection themselves.
+    fn get_or_connect(
+        opt: &mut Option<pulse::PulseConnection>,
+    ) -> Result<&mut pulse::PulseConnection, AudioError> {
+        if opt.is_none() {
+            *opt = Some(pulse::PulseConnection::new()?);
+        }
+        opt.as_mut()
+            .ok_or_else(|| AudioError::InitializationFailed("connection slot was empty".into()))
+    }
 }
 
 impl AudioDeviceTrait for AudioDevice {
     fn from_default() -> Result<Self, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            let sink_name = pulse::default_sink_name()?;
-            let snap = pulse::sink_by_name(&sink_name)?;
+            let mut conn = pulse::PulseConnection::new()?;
+            let sink_name = conn.default_sink_name()?;
+            let snap = conn.sink_by_name(&sink_name)?;
             Ok(AudioDevice {
                 id: snap.name,
                 name: snap.description,
+                conn: Rc::new(RefCell::new(Some(conn))),
             })
         }
         #[cfg(not(feature = "pulseaudio"))]
@@ -36,10 +84,12 @@ impl AudioDeviceTrait for AudioDevice {
     fn from_id(id: &str) -> Result<Self, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            let snap = pulse::sink_by_name(id)?;
+            let mut conn = pulse::PulseConnection::new()?;
+            let snap = conn.sink_by_name(id)?;
             Ok(AudioDevice {
                 id: snap.name,
                 name: snap.description,
+                conn: Rc::new(RefCell::new(Some(conn))),
             })
         }
         #[cfg(not(feature = "pulseaudio"))]
@@ -52,10 +102,12 @@ impl AudioDeviceTrait for AudioDevice {
     fn from_name(name: &str) -> Result<Self, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            let snap = pulse::sink_matching_description(name)?;
+            let mut conn = pulse::PulseConnection::new()?;
+            let snap = conn.sink_matching_description(name)?;
             Ok(AudioDevice {
                 id: snap.name,
                 name: snap.description,
+                conn: Rc::new(RefCell::new(Some(conn))),
             })
         }
         #[cfg(not(feature = "pulseaudio"))]
@@ -68,7 +120,7 @@ impl AudioDeviceTrait for AudioDevice {
     fn list() -> Result<Vec<(String, String)>, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            pulse::list_sinks()
+            pulse::PulseConnection::new()?.list_sinks()
         }
         #[cfg(not(feature = "pulseaudio"))]
         Err(AudioError::Unsupported)
@@ -77,7 +129,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn get_vol(&self) -> Result<u8, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            Ok(pulse::sink_by_name(&self.id)?.volume)
+            let mut guard = self.conn.borrow_mut();
+            let conn = Self::get_or_connect(&mut guard)?;
+            Ok(conn.sink_by_name(&self.id)?.volume)
         }
         #[cfg(not(feature = "pulseaudio"))]
         Err(AudioError::Unsupported)
@@ -86,7 +140,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn set_vol(&self, vol: u8) -> Result<(), AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            pulse::set_sink_volume(&self.id, vol)
+            let mut guard = self.conn.borrow_mut();
+            let conn = Self::get_or_connect(&mut guard)?;
+            conn.set_sink_volume(&self.id, vol)
         }
         #[cfg(not(feature = "pulseaudio"))]
         {
@@ -98,7 +154,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn is_mute(&self) -> Result<bool, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            Ok(pulse::sink_by_name(&self.id)?.mute)
+            let mut guard = self.conn.borrow_mut();
+            let conn = Self::get_or_connect(&mut guard)?;
+            Ok(conn.sink_by_name(&self.id)?.mute)
         }
         #[cfg(not(feature = "pulseaudio"))]
         Err(AudioError::Unsupported)
@@ -107,7 +165,9 @@ impl AudioDeviceTrait for AudioDevice {
     fn set_mute(&self, muted: bool) -> Result<(), AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
-            pulse::set_sink_mute(&self.id, muted)
+            let mut guard = self.conn.borrow_mut();
+            let conn = Self::get_or_connect(&mut guard)?;
+            conn.set_sink_mute(&self.id, muted)
         }
         #[cfg(not(feature = "pulseaudio"))]
         {
@@ -259,12 +319,17 @@ mod tests {
     /// `get_vol`, `is_mute`, and `set_vol` on a device whose sink ID does not
     /// exist return `DeviceNotFound` (server running) or `InitializationFailed`
     /// (no server).
+    ///
+    /// The device is constructed with `conn: None` so that the first method
+    /// call will attempt to connect (and fail gracefully if no server is
+    /// present).
     #[cfg(feature = "pulseaudio")]
     #[test]
     fn self_methods_fail_for_nonexistent_sink() {
         let device = AudioDevice {
             id: "__nonexistent_sink_xyz__".to_string(),
             name: String::new(),
+            conn: Rc::new(RefCell::new(None)),
         };
 
         let result = device.get_vol();
