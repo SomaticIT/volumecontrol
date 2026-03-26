@@ -200,18 +200,18 @@ impl AudioDeviceTrait for AudioDevice {
             let devices = internal::wasapi::list_devices(&enumerator)?;
 
             let needle = name.to_lowercase();
-            let (id, matched_name) = devices
+            let info = devices
                 .into_iter()
-                .find(|(_, n)| n.to_lowercase().contains(&needle))
+                .find(|d| d.name.to_lowercase().contains(&needle))
                 .ok_or(AudioError::DeviceNotFound)?;
 
             // Re-resolve the IMMDevice from its ID to activate the endpoint.
-            let device = internal::wasapi::get_device_by_id(&enumerator, &id)?;
+            let device = internal::wasapi::get_device_by_id(&enumerator, &info.id)?;
             let endpoint = internal::wasapi::endpoint_volume(&device)?;
 
             Ok(Self {
-                id,
-                name: matched_name,
+                id: info.id,
+                name: info.name,
                 endpoint: Mutex::new(endpoint),
             })
         }
