@@ -52,6 +52,8 @@ jobs:
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
+          # rustfmt is intentionally omitted here: formatting is checked
+          # by the quality.yml workflow which runs on all code changes.
           components: clippy
 
       - name: Cache Cargo registry
@@ -146,6 +148,46 @@ jobs:
 
       - name: cargo test volumecontrol
         run: cargo test -p volumecontrol -- --test-threads=1
+
+  # ── Documentation (Linux / PulseAudio) ────────────────────────────────────────
+  doc:
+    name: cargo doc (Linux)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-doc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-doc-
+
+      - name: Install PulseAudio development libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libpulse-dev libasound2-dev
+
+      - name: cargo doc
+        run: >
+          cargo doc
+          -p volumecontrol-core
+          -p volumecontrol-linux
+          -p volumecontrol
+          --features volumecontrol-linux/pulseaudio
+          --no-deps
 
   # ── Cross-compilation with `cross` ────────────────────────────────────────────
   #
