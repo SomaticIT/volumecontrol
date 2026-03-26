@@ -8,6 +8,7 @@
 
 #[cfg(feature = "wasapi")]
 pub(crate) mod wasapi {
+    use thiserror::Error;
     use volumecontrol_core::AudioError;
 
     use windows::Win32::{
@@ -60,14 +61,16 @@ pub(crate) mod wasapi {
     /// [`IAudioEndpointVolume`] and retry.  It must never be converted to
     /// [`AudioError::DeviceNotFound`] until *after* a refresh attempt has also
     /// failed.
-    #[derive(Debug)]
+    #[derive(Debug, Error)]
     pub(crate) enum EndpointError {
         /// The WASAPI endpoint's COM interface was invalidated
         /// (`AUDCLNT_E_DEVICE_INVALIDATED`).  The caller should re-activate
         /// the interface and retry the operation.
+        #[error("WASAPI endpoint was invalidated (AUDCLNT_E_DEVICE_INVALIDATED)")]
         DeviceInvalidated,
         /// Any other error returned by the endpoint operation.
-        Error(AudioError),
+        #[error(transparent)]
+        Error(#[from] AudioError),
     }
 
     // -------------------------------------------------------------------------

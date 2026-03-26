@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 volumecontrol-core = { workspace = true }
+thiserror = { workspace = true }
 
 # Enabled by the `wasapi` feature; only meaningful when targeting Windows.
 [dependencies.windows]
