@@ -66,8 +66,36 @@ pub trait AudioDevice: Sized {
     fn set_mute(&self, muted: bool) -> Result<(), AudioError>;
 
     /// Returns the unique identifier for this device.
+    ///
+    /// The returned value is the same opaque string that [`Self::list`] yields
+    /// as the first element of each `(id, name)` pair and that
+    /// [`Self::from_id`] accepts as its argument.
+    ///
+    /// The value is guaranteed to be non-empty.
+    ///
+    /// # Platform-specific formats
+    ///
+    /// | Platform | Format                                                  |
+    /// |----------|---------------------------------------------------------|
+    /// | Linux    | PulseAudio sink name (e.g. `alsa_output.pci-0000_…`)    |
+    /// | Windows  | WASAPI endpoint ID (e.g. `{0.0.0.00000000}.{…}`)       |
+    /// | macOS    | CoreAudio device UID (numeric string, e.g. `"73"`)      |
     fn id(&self) -> &str;
 
-    /// Returns the human-readable name of this device.
+    /// Returns the human-readable display name of this device.
+    ///
+    /// The returned value is the same string that [`Self::list`] yields as the
+    /// second element of each `(id, name)` pair and that [`Self::from_name`]
+    /// uses for substring matching.
+    ///
+    /// The value is guaranteed to be non-empty.
+    ///
+    /// # Platform-specific formats
+    ///
+    /// | Platform | Format                                                  |
+    /// |----------|---------------------------------------------------------|
+    /// | Linux    | PulseAudio sink description (e.g. `"Built-in Audio"`)   |
+    /// | Windows  | WASAPI endpoint friendly name (e.g. `"Speakers"`)       |
+    /// | macOS    | CoreAudio device name (e.g. `"MacBook Pro Speakers"`)   |
     fn name(&self) -> &str;
 }

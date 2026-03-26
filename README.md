@@ -135,6 +135,18 @@ for (id, name) in &devices {
 }
 ```
 
+### Read device ID and name
+
+```rust
+// id() returns the opaque platform identifier used by from_id() and list()
+println!("Device id:   {}", device.id());
+
+// name() returns the human-readable label used by from_name() and list()
+println!("Device name: {}", device.name());
+```
+
+Both values are guaranteed to be non-empty.
+
 ### Read and change the volume
 
 ```rust
