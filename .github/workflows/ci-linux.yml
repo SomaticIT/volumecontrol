@@ -28,13 +28,21 @@ on:
       - "volumecontrol-linux/**"
       - "volumecontrol-core/**"
       - "volumecontrol/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/ci-linux.yml"
   pull_request:
     paths:
       - "volumecontrol-linux/**"
       - "volumecontrol-core/**"
       - "volumecontrol/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
       - ".github/workflows/ci-linux.yml"
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
 
 env:
   CARGO_TERM_COLOR: always
@@ -111,12 +119,6 @@ jobs:
           --all-targets
           -- -D warnings
 
-      - name: cargo check volumecontrol-linux (no features)
-        run: cargo check -p volumecontrol-linux
-
-      - name: cargo check volumecontrol-linux (pulseaudio feature)
-        run: cargo check -p volumecontrol-linux --features pulseaudio
-
       - name: cargo build volumecontrol-linux (no features)
         run: cargo build -p volumecontrol-linux
 
@@ -139,9 +141,6 @@ jobs:
           -p volumecontrol
           --all-targets
           -- -D warnings
-
-      - name: cargo check volumecontrol
-        run: cargo check -p volumecontrol
 
       - name: cargo build volumecontrol
         run: cargo build -p volumecontrol
@@ -224,16 +223,25 @@ jobs:
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache Cargo registry
+      - name: Cache Cargo registry & build
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
+            target
           key: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-
 
+      - name: Cache cross binary
+        id: cache-cross
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: cross-${{ runner.os }}-${{ runner.arch }}
+
       - name: Install cross
+        if: steps.cache-cross.outputs.cache-hit != 'true'
         run: cargo install cross --locked
 
       # ── volumecontrol-linux ──────────────────────────────────────────────────
