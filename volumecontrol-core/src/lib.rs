@@ -1,7 +1,7 @@
-mod device_info;
+mod structs;
 mod error;
 mod traits;
 
-pub use device_info::DeviceInfo;
+pub use structs::DeviceInfo;
 pub use error::AudioError;
 pub use traits::AudioDevice;
