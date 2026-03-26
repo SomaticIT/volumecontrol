@@ -34,4 +34,10 @@ pub enum AudioError {
     /// The operation is not supported on the current platform.
     #[error("operation not supported on this platform")]
     Unsupported,
+
+    /// A mutex protecting a platform audio endpoint was poisoned (a thread
+    /// panicked while holding the lock).  The endpoint state may be
+    /// inconsistent; callers should discard the device and re-acquire it.
+    #[error("audio endpoint mutex was poisoned")]
+    EndpointLockPoisoned,
 }

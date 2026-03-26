@@ -71,6 +71,8 @@ impl AudioDevice {
     ///   disappeared between calls) `AudioError::DeviceNotFound` is returned.
     /// - On any other [`EndpointError::Error`] the wrapped [`AudioError`] is
     ///   propagated unchanged.
+    /// - Returns [`AudioError::EndpointLockPoisoned`] if the endpoint mutex is
+    ///   poisoned (a thread panicked while holding the lock).
     ///
     /// [`ComGuard`]: internal::wasapi::ComGuard
     /// [`try_refresh_endpoint`]: AudioDevice::try_refresh_endpoint
@@ -79,13 +81,24 @@ impl AudioDevice {
         op: impl Fn(&IAudioEndpointVolume) -> Result<T, internal::wasapi::EndpointError>,
     ) -> Result<T, AudioError> {
         let _com = internal::wasapi::ComGuard::new()?;
-        match op(&self.endpoint.lock().expect("endpoint lock poisoned")) {
+        let guard = self
+            .endpoint
+            .lock()
+            .map_err(|_| AudioError::EndpointLockPoisoned)?;
+        match op(&guard) {
             Ok(v) => Ok(v),
             Err(internal::wasapi::EndpointError::Error(e)) => Err(e),
             Err(internal::wasapi::EndpointError::DeviceInvalidated) => {
+                // Release the lock before refreshing so `try_refresh_endpoint`
+                // can also acquire it.
+                drop(guard);
                 // AUDCLNT_E_DEVICE_INVALIDATED — refresh cache and retry once.
                 self.try_refresh_endpoint()?;
-                match op(&self.endpoint.lock().expect("endpoint lock poisoned")) {
+                let guard = self
+                    .endpoint
+                    .lock()
+                    .map_err(|_| AudioError::EndpointLockPoisoned)?;
+                match op(&guard) {
                     Ok(v) => Ok(v),
                     Err(internal::wasapi::EndpointError::Error(e)) => Err(e),
                     // Still invalidated after a fresh endpoint: device is gone.
@@ -109,7 +122,8 @@ impl AudioDevice {
     /// # Errors
     ///
     /// Returns [`AudioError::DeviceNotFound`] if the device no longer exists,
-    /// or [`AudioError::InitializationFailed`] on other COM failures.
+    /// [`AudioError::InitializationFailed`] on other COM failures, or
+    /// [`AudioError::EndpointLockPoisoned`] if the endpoint mutex is poisoned.
     ///
     /// [`with_endpoint`]: AudioDevice::with_endpoint
     /// [`ComGuard`]: internal::wasapi::ComGuard
@@ -117,7 +131,10 @@ impl AudioDevice {
         let enumerator = internal::wasapi::create_enumerator()?;
         let device = internal::wasapi::get_device_by_id(&enumerator, &self.id)?;
         let new_endpoint = internal::wasapi::endpoint_volume(&device)?;
-        *self.endpoint.lock().expect("endpoint lock poisoned") = new_endpoint;
+        *self
+            .endpoint
+            .lock()
+            .map_err(|_| AudioError::EndpointLockPoisoned)? = new_endpoint;
         Ok(())
     }
 }
