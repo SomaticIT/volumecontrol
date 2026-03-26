@@ -9,7 +9,7 @@ on:
       - "volumecontrol/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/windows.yml"
+      - ".github/workflows/ci-windows.yml"
   pull_request:
     paths:
       - "volumecontrol-windows/**"
@@ -17,7 +17,7 @@ on:
       - "volumecontrol/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/windows.yml"
+      - ".github/workflows/ci-windows.yml"
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -31,6 +31,8 @@ jobs:
   windows:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -59,6 +61,13 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      # Ensure the cross-compilation target is installed for the active
+      # toolchain.  dtolnay/rust-toolchain respects rust-toolchain.toml and
+      # may not propagate the `with: targets:` input to the pinned toolchain;
+      # an explicit `rustup target add` is idempotent and always correct.
+      - name: Add cross-compilation target
+        run: rustup target add ${{ matrix.target }}
 
       - name: Cache Cargo registry & build
         uses: actions/cache@v4
