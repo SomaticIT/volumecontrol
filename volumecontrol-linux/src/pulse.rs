@@ -1,9 +1,13 @@
 //! Internal PulseAudio helpers for `volumecontrol-linux`.
 //!
-//! Every public(crate) function in this module opens its own connection to the
-//! PulseAudio server, performs a single operation synchronously by pumping the
-//! standard main loop, and then drops the connection.  This keeps the API
-//! simple and thread-safe: callers do not need to share a long-lived context.
+//! This module exposes a [`PulseConnection`] struct that holds a cached
+//! `Mainloop` + `Context` pair.  Callers should reuse a single
+//! [`PulseConnection`] across multiple operations to avoid the overhead of
+//! re-establishing a PulseAudio connection on every call.
+//!
+//! [`PulseConnection`] is `!Send` because the underlying [`Mainloop`] and
+//! [`Context`] types from `libpulse-binding` are `!Send`.  Use on a single
+//! thread only.
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -135,180 +139,231 @@ fn wait_for_op<C: ?Sized>(
     }
 }
 
-// ─── Public(crate) API ───────────────────────────────────────────────────────
+// ─── Cached connection ───────────────────────────────────────────────────────
 
-/// Returns the name of the system default PulseAudio sink, or
-/// [`AudioError::DeviceNotFound`] if no default sink is configured.
+/// A cached PulseAudio connection: a standard main loop paired with a context.
 ///
-/// # Errors
+/// Reuse a single `PulseConnection` across multiple operations to avoid the
+/// overhead of re-establishing a connection on every call.
 ///
-/// Returns [`AudioError::InitializationFailed`] if the connection to the
-/// PulseAudio server fails.
-pub(crate) fn default_sink_name() -> Result<String, AudioError> {
-    let (mut ml, ctx) = connect()?;
-
-    let result: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
-    let result_cb = Rc::clone(&result);
-
-    let op = ctx.introspect().get_server_info(move |info| {
-        *result_cb.borrow_mut() = info.default_sink_name.as_deref().map(String::from);
-    });
-    wait_for_op(&mut ml, &op)?;
-
-    let borrowed = result.borrow();
-    let name = borrowed.clone().ok_or(AudioError::DeviceNotFound)?;
-    Ok(name)
+/// # Thread safety
+///
+/// `PulseConnection` is `!Send` because [`Mainloop`] and [`Context`] from
+/// `libpulse-binding` are `!Send`.  Use on a single thread only.
+pub(crate) struct PulseConnection {
+    mainloop: Mainloop,
+    context: Context,
 }
 
-/// Returns a [`SinkSnapshot`] for the PulseAudio sink with the given name
-/// (i.e. the PA sink identifier, **not** the human-readable description).
-///
-/// # Errors
-///
-/// Returns [`AudioError::DeviceNotFound`] if no sink with that name exists.
-pub(crate) fn sink_by_name(name: &str) -> Result<SinkSnapshot, AudioError> {
-    let (mut ml, ctx) = connect()?;
-
-    let result: Rc<RefCell<Option<SinkSnapshot>>> = Rc::new(RefCell::new(None));
-    let result_cb = Rc::clone(&result);
-
-    let op = ctx.introspect().get_sink_info_by_name(name, move |list| {
-        if let ListResult::Item(info) = list {
-            *result_cb.borrow_mut() = Some(SinkSnapshot {
-                name: opt_cow_str(info.name.as_ref()),
-                description: opt_cow_str(info.description.as_ref()),
-                volume: volume_to_pct(info.volume.avg()),
-                mute: info.mute,
-            });
-        }
-    });
-    wait_for_op(&mut ml, &op)?;
-
-    let snap = result.borrow().clone().ok_or(AudioError::DeviceNotFound)?;
-    Ok(snap)
-}
-
-/// Returns the first sink whose description contains `query` (case-sensitive).
-///
-/// # Errors
-///
-/// Returns [`AudioError::DeviceNotFound`] if no matching sink is found.
-pub(crate) fn sink_matching_description(query: &str) -> Result<SinkSnapshot, AudioError> {
-    list_sink_snapshots()?
-        .into_iter()
-        .find(|s| s.description.contains(query))
-        .ok_or(AudioError::DeviceNotFound)
-}
-
-/// Lists all PulseAudio sinks as `(name, description)` pairs.
-///
-/// # Errors
-///
-/// Returns [`AudioError::ListFailed`] if the enumeration fails.
-pub(crate) fn list_sinks() -> Result<Vec<(String, String)>, AudioError> {
-    Ok(list_sink_snapshots()?
-        .into_iter()
-        .map(|s| (s.name, s.description))
-        .collect())
-}
-
-/// Sets the volume of the named sink to `vol` (`0..=100`), preserving the
-/// channel layout of the sink.
-///
-/// # Errors
-///
-/// Returns [`AudioError::SetVolumeFailed`] if the server rejects the change.
-pub(crate) fn set_sink_volume(name: &str, vol: u8) -> Result<(), AudioError> {
-    let (mut ml, ctx) = connect()?;
-
-    // Fetch the current channel-volume to preserve the channel layout.
-    let cv: Rc<RefCell<Option<ChannelVolumes>>> = Rc::new(RefCell::new(None));
-    let cv_cb = Rc::clone(&cv);
-
-    let op = ctx.introspect().get_sink_info_by_name(name, move |list| {
-        if let ListResult::Item(info) = list {
-            *cv_cb.borrow_mut() = Some(info.volume);
-        }
-    });
-    wait_for_op(&mut ml, &op)?;
-
-    let cv_opt: Option<ChannelVolumes> = *cv.borrow();
-    let mut volumes = cv_opt.ok_or(AudioError::DeviceNotFound)?;
-
-    let pa_vol = pct_to_volume(vol);
-    volumes.set(volumes.len(), pa_vol);
-
-    let success: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
-    let success_cb = Rc::clone(&success);
-
-    let mut insp = ctx.introspect();
-    let op2 = insp.set_sink_volume_by_name(
-        name,
-        &volumes,
-        Some(Box::new(move |ok| *success_cb.borrow_mut() = ok)),
-    );
-    wait_for_op(&mut ml, &op2)?;
-
-    if *success.borrow() {
-        Ok(())
-    } else {
-        Err(AudioError::SetVolumeFailed(
-            "PulseAudio server rejected the volume change".into(),
-        ))
+impl PulseConnection {
+    /// Opens a new connection to the PulseAudio server.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::InitializationFailed`] if the connection cannot
+    /// be established.
+    pub(crate) fn new() -> Result<Self, AudioError> {
+        let (mainloop, context) = connect()?;
+        Ok(Self { mainloop, context })
     }
-}
 
-/// Sets the mute state of the named sink.
-///
-/// # Errors
-///
-/// Returns [`AudioError::SetMuteFailed`] if the server rejects the change.
-pub(crate) fn set_sink_mute(name: &str, muted: bool) -> Result<(), AudioError> {
-    let (mut ml, ctx) = connect()?;
-
-    let success: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
-    let success_cb = Rc::clone(&success);
-
-    let mut insp = ctx.introspect();
-    let op = insp.set_sink_mute_by_name(
-        name,
-        muted,
-        Some(Box::new(move |ok| *success_cb.borrow_mut() = ok)),
-    );
-    wait_for_op(&mut ml, &op)?;
-
-    if *success.borrow() {
-        Ok(())
-    } else {
-        Err(AudioError::SetMuteFailed(
-            "PulseAudio server rejected the mute state change".into(),
-        ))
-    }
-}
-
-// ─── Private helpers ─────────────────────────────────────────────────────────
-
-/// Enumerates all PulseAudio sinks and returns a `Vec<SinkSnapshot>`.
-fn list_sink_snapshots() -> Result<Vec<SinkSnapshot>, AudioError> {
-    let (mut ml, ctx) = connect()?;
-
-    let result: Rc<RefCell<Vec<SinkSnapshot>>> = Rc::new(RefCell::new(Vec::new()));
-    let result_cb = Rc::clone(&result);
-
-    let op = ctx.introspect().get_sink_info_list(move |list| {
-        if let ListResult::Item(info) = list {
-            result_cb.borrow_mut().push(SinkSnapshot {
-                name: opt_cow_str(info.name.as_ref()),
-                description: opt_cow_str(info.description.as_ref()),
-                volume: volume_to_pct(info.volume.avg()),
-                mute: info.mute,
-            });
+    /// Reconnects to the PulseAudio server if the context is no longer in the
+    /// `Ready` state (e.g. after a server disconnect).
+    fn ensure_ready(&mut self) -> Result<(), AudioError> {
+        if !matches!(self.context.get_state(), ContextState::Ready) {
+            let (mainloop, context) = connect()?;
+            // Drop the old context before the old mainloop so that PA's
+            // internal reference counting sees the context gone first.
+            self.context = context;
+            self.mainloop = mainloop;
         }
-    });
-    wait_for_op(&mut ml, &op)?;
+        Ok(())
+    }
 
-    let sinks = result.borrow().clone();
-    Ok(sinks)
+    /// Returns the name of the system default PulseAudio sink, or
+    /// [`AudioError::DeviceNotFound`] if no default sink is configured.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::InitializationFailed`] if the connection to the
+    /// PulseAudio server fails.
+    pub(crate) fn default_sink_name(&mut self) -> Result<String, AudioError> {
+        self.ensure_ready()?;
+
+        let result: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+        let result_cb = Rc::clone(&result);
+
+        let op = self.context.introspect().get_server_info(move |info| {
+            *result_cb.borrow_mut() = info.default_sink_name.as_deref().map(String::from);
+        });
+        wait_for_op(&mut self.mainloop, &op)?;
+
+        let borrowed = result.borrow();
+        let name = borrowed.clone().ok_or(AudioError::DeviceNotFound)?;
+        Ok(name)
+    }
+
+    /// Returns a [`SinkSnapshot`] for the PulseAudio sink with the given name
+    /// (i.e. the PA sink identifier, **not** the human-readable description).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::DeviceNotFound`] if no sink with that name exists.
+    pub(crate) fn sink_by_name(&mut self, name: &str) -> Result<SinkSnapshot, AudioError> {
+        self.ensure_ready()?;
+
+        let result: Rc<RefCell<Option<SinkSnapshot>>> = Rc::new(RefCell::new(None));
+        let result_cb = Rc::clone(&result);
+
+        let op = self
+            .context
+            .introspect()
+            .get_sink_info_by_name(name, move |list| {
+                if let ListResult::Item(info) = list {
+                    *result_cb.borrow_mut() = Some(SinkSnapshot {
+                        name: opt_cow_str(info.name.as_ref()),
+                        description: opt_cow_str(info.description.as_ref()),
+                        volume: volume_to_pct(info.volume.avg()),
+                        mute: info.mute,
+                    });
+                }
+            });
+        wait_for_op(&mut self.mainloop, &op)?;
+
+        let snap = result.borrow().clone().ok_or(AudioError::DeviceNotFound)?;
+        Ok(snap)
+    }
+
+    /// Returns the first sink whose description contains `query`
+    /// (case-sensitive).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::DeviceNotFound`] if no matching sink is found.
+    pub(crate) fn sink_matching_description(
+        &mut self,
+        query: &str,
+    ) -> Result<SinkSnapshot, AudioError> {
+        self.list_sink_snapshots()?
+            .into_iter()
+            .find(|s| s.description.contains(query))
+            .ok_or(AudioError::DeviceNotFound)
+    }
+
+    /// Lists all PulseAudio sinks as `(name, description)` pairs.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::InitializationFailed`] if the enumeration fails.
+    pub(crate) fn list_sinks(&mut self) -> Result<Vec<(String, String)>, AudioError> {
+        Ok(self
+            .list_sink_snapshots()?
+            .into_iter()
+            .map(|s| (s.name, s.description))
+            .collect())
+    }
+
+    /// Sets the volume of the named sink to `vol` (`0..=100`), preserving the
+    /// channel layout of the sink.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::SetVolumeFailed`] if the server rejects the change.
+    pub(crate) fn set_sink_volume(&mut self, name: &str, vol: u8) -> Result<(), AudioError> {
+        self.ensure_ready()?;
+
+        // Fetch the current channel-volume to preserve the channel layout.
+        let cv: Rc<RefCell<Option<ChannelVolumes>>> = Rc::new(RefCell::new(None));
+        let cv_cb = Rc::clone(&cv);
+
+        let op = self
+            .context
+            .introspect()
+            .get_sink_info_by_name(name, move |list| {
+                if let ListResult::Item(info) = list {
+                    *cv_cb.borrow_mut() = Some(info.volume);
+                }
+            });
+        wait_for_op(&mut self.mainloop, &op)?;
+
+        let cv_opt: Option<ChannelVolumes> = *cv.borrow();
+        let mut volumes = cv_opt.ok_or(AudioError::DeviceNotFound)?;
+
+        let pa_vol = pct_to_volume(vol);
+        volumes.set(volumes.len(), pa_vol);
+
+        let success: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+        let success_cb = Rc::clone(&success);
+
+        let mut insp = self.context.introspect();
+        let op2 = insp.set_sink_volume_by_name(
+            name,
+            &volumes,
+            Some(Box::new(move |ok| *success_cb.borrow_mut() = ok)),
+        );
+        wait_for_op(&mut self.mainloop, &op2)?;
+
+        if *success.borrow() {
+            Ok(())
+        } else {
+            Err(AudioError::SetVolumeFailed(
+                "PulseAudio server rejected the volume change".into(),
+            ))
+        }
+    }
+
+    /// Sets the mute state of the named sink.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::SetMuteFailed`] if the server rejects the change.
+    pub(crate) fn set_sink_mute(&mut self, name: &str, muted: bool) -> Result<(), AudioError> {
+        self.ensure_ready()?;
+
+        let success: Rc<RefCell<bool>> = Rc::new(RefCell::new(false));
+        let success_cb = Rc::clone(&success);
+
+        let mut insp = self.context.introspect();
+        let op = insp.set_sink_mute_by_name(
+            name,
+            muted,
+            Some(Box::new(move |ok| *success_cb.borrow_mut() = ok)),
+        );
+        wait_for_op(&mut self.mainloop, &op)?;
+
+        if *success.borrow() {
+            Ok(())
+        } else {
+            Err(AudioError::SetMuteFailed(
+                "PulseAudio server rejected the mute state change".into(),
+            ))
+        }
+    }
+
+    // ─── Private helpers ─────────────────────────────────────────────────────
+
+    /// Enumerates all PulseAudio sinks and returns a `Vec<SinkSnapshot>`.
+    fn list_sink_snapshots(&mut self) -> Result<Vec<SinkSnapshot>, AudioError> {
+        self.ensure_ready()?;
+
+        let result: Rc<RefCell<Vec<SinkSnapshot>>> = Rc::new(RefCell::new(Vec::new()));
+        let result_cb = Rc::clone(&result);
+
+        let op = self.context.introspect().get_sink_info_list(move |list| {
+            if let ListResult::Item(info) = list {
+                result_cb.borrow_mut().push(SinkSnapshot {
+                    name: opt_cow_str(info.name.as_ref()),
+                    description: opt_cow_str(info.description.as_ref()),
+                    volume: volume_to_pct(info.volume.avg()),
+                    mute: info.mute,
+                });
+            }
+        });
+        wait_for_op(&mut self.mainloop, &op)?;
+
+        let sinks = result.borrow().clone();
+        Ok(sinks)
+    }
 }
 
 /// Converts an `Option<Cow<str>>` reference to an owned `String`, returning
