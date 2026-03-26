@@ -9,7 +9,7 @@ on:
       - "volumecontrol/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/windows.yml"
+      - ".github/workflows/ci-windows.yml"
   pull_request:
     paths:
       - "volumecontrol-windows/**"
@@ -17,12 +17,22 @@ on:
       - "volumecontrol/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/windows.yml"
+      - ".github/workflows/ci-windows.yml"
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  VAD_VERSION: "25.7.14"
+  NEFCON_VERSION: "v1.17.40"
 
 jobs:
   windows:
     name: ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -52,10 +62,48 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # Ensure the cross-compilation target is installed for the active
+      # toolchain.  dtolnay/rust-toolchain respects rust-toolchain.toml and
+      # may not propagate the `with: targets:` input to the pinned toolchain;
+      # an explicit `rustup target add` is idempotent and always correct.
+      - name: Add cross-compilation target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
+
       # Install the Virtual Audio Driver on x64 only — the signed release cannot
       # be reliably installed on x86 (i686) or ARM64.  This gives WASAPI tests a
       # real audio endpoint on the x64 runner.
       # Uses nefcon (downloaded directly) to install the driver silently.
+      - name: Cache Virtual Audio Driver + nefcon downloads
+        id: cache-vad
+        if: matrix.virtual_audio
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}\virtual-audio-driver.zip
+            ${{ runner.temp }}\nefcon.zip
+          key: windows-vad-${{ env.VAD_VERSION }}-nefcon-${{ env.NEFCON_VERSION }}
+
+      - name: Download Virtual Audio Driver + nefcon (if not cached)
+        if: matrix.virtual_audio && steps.cache-vad.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://github.com/VirtualDrivers/Virtual-Audio-Driver/releases/download/$env:VAD_VERSION/Virtual.Audio.Driver.Signed.-.$env:VAD_VERSION.zip" `
+            -OutFile "$env:RUNNER_TEMP\virtual-audio-driver.zip"
+          Invoke-WebRequest `
+            -Uri "https://github.com/nefarius/nefcon/releases/download/$env:NEFCON_VERSION/nefcon_$env:NEFCON_VERSION.zip" `
+            -OutFile "$env:RUNNER_TEMP\nefcon.zip"
+
       - name: Install Virtual Audio Driver
         if: matrix.virtual_audio
         shell: powershell
@@ -63,11 +111,8 @@ jobs:
           # Enable test-signing so unsigned/self-signed drivers are accepted.
           bcdedit /set testsigning on
 
-          $vadZip = "$env:TEMP\virtual-audio-driver.zip"
-          $vadDir = "$env:TEMP\virtual-audio-driver"
-          Invoke-WebRequest `
-            -Uri "https://github.com/VirtualDrivers/Virtual-Audio-Driver/releases/download/25.7.14/Virtual.Audio.Driver.Signed.-.25.7.14.zip" `
-            -OutFile $vadZip
+          $vadZip = "$env:RUNNER_TEMP\virtual-audio-driver.zip"
+          $vadDir = "$env:RUNNER_TEMP\virtual-audio-driver"
           Expand-Archive -Path $vadZip -DestinationPath $vadDir
 
           # Trust the driver's signing certificate to avoid install prompts.
@@ -77,12 +122,8 @@ jobs:
           $store.Add($signature.SignerCertificate)
           $store.Close()
 
-          # Download nefcon directly from GitHub (winget may not have the package).
-          $nefconZip = "$env:TEMP\nefcon.zip"
-          $nefconDir = "$env:TEMP\nefcon"
-          Invoke-WebRequest `
-            -Uri "https://github.com/nefarius/nefcon/releases/download/v1.17.40/nefcon_v1.17.40.zip" `
-            -OutFile $nefconZip
+          $nefconZip = "$env:RUNNER_TEMP\nefcon.zip"
+          $nefconDir = "$env:RUNNER_TEMP\nefcon"
           Expand-Archive -Path $nefconZip -DestinationPath $nefconDir
           $nefconc = "$nefconDir\x64\nefconc.exe"
 
