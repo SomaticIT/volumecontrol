@@ -130,8 +130,8 @@ let device = AudioDevice::from_name("Speakers")?;
 
 ```rust
 let devices = AudioDevice::list()?;
-for (id, name) in &devices {
-    println!("{id}  —  {name}");
+for info in &devices {
+    println!("{}  —  {}", info.id, info.name);
 }
 ```
 

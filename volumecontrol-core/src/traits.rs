@@ -1,4 +1,4 @@
-use crate::AudioError;
+use crate::{AudioError, DeviceInfo};
 
 /// Common interface for audio device volume control.
 ///
@@ -32,12 +32,12 @@ pub trait AudioDevice: Sized {
     /// or another error if the lookup fails.
     fn from_name(name: &str) -> Result<Self, AudioError>;
 
-    /// Lists all available audio devices as `(id, name)` pairs.
+    /// Lists all available audio devices.
     ///
     /// # Errors
     ///
     /// Returns an error if the device list cannot be retrieved.
-    fn list() -> Result<Vec<(String, String)>, AudioError>;
+    fn list() -> Result<Vec<DeviceInfo>, AudioError>;
 
     /// Returns the current volume level in the range `0..=100`.
     ///
@@ -72,8 +72,7 @@ pub trait AudioDevice: Sized {
     /// Returns the unique identifier for this device.
     ///
     /// The returned value is the same opaque string that [`Self::list`] yields
-    /// as the first element of each `(id, name)` pair and that
-    /// [`Self::from_id`] accepts as its argument.
+    /// as [`DeviceInfo::id`] and that [`Self::from_id`] accepts as its argument.
     ///
     /// The value is guaranteed to be non-empty.
     ///
@@ -88,8 +87,8 @@ pub trait AudioDevice: Sized {
 
     /// Returns the human-readable display name of this device.
     ///
-    /// The returned value is the same string that [`Self::list`] yields as the
-    /// second element of each `(id, name)` pair and that [`Self::from_name`]
+    /// The returned value is the same string that [`Self::list`] yields as
+    /// [`DeviceInfo::name`] and that [`Self::from_name`]
     /// uses for substring matching.
     ///
     /// The value is guaranteed to be non-empty.

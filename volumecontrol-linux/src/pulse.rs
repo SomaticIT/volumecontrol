@@ -20,7 +20,7 @@ use pulse::{
     volume::{ChannelVolumes, Volume},
 };
 
-use volumecontrol_core::AudioError;
+use volumecontrol_core::{AudioError, DeviceInfo};
 
 // ─── Data types ─────────────────────────────────────────────────────────────
 
@@ -283,16 +283,19 @@ impl PulseConnection {
             .ok_or(AudioError::DeviceNotFound)
     }
 
-    /// Lists all PulseAudio sinks as `(name, description)` pairs.
+    /// Lists all PulseAudio sinks as [`DeviceInfo`] values.
     ///
     /// # Errors
     ///
     /// Returns [`AudioError::InitializationFailed`] if the enumeration fails.
-    pub(crate) fn list_sinks(&mut self) -> Result<Vec<(String, String)>, AudioError> {
+    pub(crate) fn list_sinks(&mut self) -> Result<Vec<DeviceInfo>, AudioError> {
         Ok(self
             .list_sink_snapshots()?
             .into_iter()
-            .map(|s| (s.name, s.description))
+            .map(|s| DeviceInfo {
+                id: s.name,
+                name: s.description,
+            })
             .collect())
     }
 

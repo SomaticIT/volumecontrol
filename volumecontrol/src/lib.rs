@@ -23,6 +23,7 @@
 //! ```
 
 pub use volumecontrol_core::AudioError;
+pub use volumecontrol_core::DeviceInfo;
 
 use volumecontrol_core::AudioDevice as _;
 
@@ -79,12 +80,12 @@ impl AudioDevice {
         Inner::from_name(name).map(Self)
     }
 
-    /// Lists all available audio devices as `(id, name)` pairs.
+    /// Lists all available audio devices.
     ///
     /// # Errors
     ///
     /// Returns an error if the device list cannot be retrieved.
-    pub fn list() -> Result<Vec<(String, String)>, AudioError> {
+    pub fn list() -> Result<Vec<DeviceInfo>, AudioError> {
         Inner::list()
     }
 
@@ -128,8 +129,8 @@ impl AudioDevice {
 
     /// Returns the unique identifier for this device.
     ///
-    /// The value is the same opaque string that [`Self::list`] yields as the
-    /// first element of each `(id, name)` pair and that [`Self::from_id`]
+    /// The value is the same opaque string that [`Self::list`] yields as
+    /// [`DeviceInfo::id`] and that [`Self::from_id`]
     /// accepts as its argument.  It is guaranteed to be non-empty.
     ///
     /// # Platform-specific formats
@@ -145,8 +146,8 @@ impl AudioDevice {
 
     /// Returns the human-readable display name of this device.
     ///
-    /// The value is the same string that [`Self::list`] yields as the second
-    /// element of each `(id, name)` pair and that [`Self::from_name`] uses for
+    /// The value is the same string that [`Self::list`] yields as
+    /// [`DeviceInfo::name`] and that [`Self::from_name`] uses for
     /// substring matching.  It is guaranteed to be non-empty.
     ///
     /// # Platform-specific formats
@@ -205,9 +206,9 @@ mod tests {
             !devices.is_empty(),
             "expected at least one audio device from list()"
         );
-        for (id, name) in &devices {
-            assert!(!id.is_empty(), "device id must not be empty");
-            assert!(!name.is_empty(), "device name must not be empty");
+        for info in &devices {
+            assert!(!info.id.is_empty(), "device id must not be empty");
+            assert!(!info.name.is_empty(), "device name must not be empty");
         }
     }
 
@@ -215,8 +216,8 @@ mod tests {
     #[test]
     fn from_id_valid_id_returns_ok() {
         let devices = AudioDevice::list().expect("list()");
-        let (id, _name) = devices.first().expect("at least one device in list");
-        let found = AudioDevice::from_id(id);
+        let first = devices.first().expect("at least one device in list");
+        let found = AudioDevice::from_id(&first.id);
         assert!(
             found.is_ok(),
             "from_id with a valid id should succeed, got {found:?}"
@@ -234,8 +235,8 @@ mod tests {
     #[test]
     fn from_name_partial_match_returns_ok() {
         let devices = AudioDevice::list().expect("list()");
-        let (_id, name) = devices.first().expect("at least one device in list");
-        let partial: String = name.chars().take(3).collect();
+        let first = devices.first().expect("at least one device in list");
+        let partial: String = first.name.chars().take(3).collect();
         let found = AudioDevice::from_name(&partial);
         assert!(
             found.is_ok(),

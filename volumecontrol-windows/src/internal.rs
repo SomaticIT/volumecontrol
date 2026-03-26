@@ -9,7 +9,7 @@
 #[cfg(feature = "wasapi")]
 pub(crate) mod wasapi {
     use thiserror::Error;
-    use volumecontrol_core::AudioError;
+    use volumecontrol_core::{AudioError, DeviceInfo};
 
     use windows::Win32::{
         Devices::FunctionDiscovery::PKEY_Device_FriendlyName,
@@ -290,7 +290,7 @@ pub(crate) mod wasapi {
         }
     }
 
-    /// Lists all active render endpoints as `(id, name)` pairs.
+    /// Lists all active render endpoints as [`DeviceInfo`] values.
     ///
     /// # Errors
     ///
@@ -299,7 +299,7 @@ pub(crate) mod wasapi {
     /// be read.
     pub(crate) fn list_devices(
         enumerator: &IMMDeviceEnumerator,
-    ) -> Result<Vec<(String, String)>, AudioError> {
+    ) -> Result<Vec<DeviceInfo>, AudioError> {
         let collection = enumerate_devices(enumerator)?;
 
         // SAFETY: GetCount is a simple read-only COM call.
@@ -321,7 +321,7 @@ pub(crate) mod wasapi {
 
             let id = device_id(&device)?;
             let name = device_name(&device)?;
-            result.push((id, name));
+            result.push(DeviceInfo { id, name });
         }
 
         Ok(result)

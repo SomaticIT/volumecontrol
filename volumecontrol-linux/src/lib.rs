@@ -1,6 +1,6 @@
 use std::fmt;
 
-use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
+use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError, DeviceInfo};
 
 #[cfg(feature = "pulseaudio")]
 use std::{cell::RefCell, rc::Rc};
@@ -117,7 +117,7 @@ impl AudioDeviceTrait for AudioDevice {
         }
     }
 
-    fn list() -> Result<Vec<(String, String)>, AudioError> {
+    fn list() -> Result<Vec<DeviceInfo>, AudioError> {
         #[cfg(feature = "pulseaudio")]
         {
             pulse::PulseConnection::new()?.list_sinks()
@@ -388,9 +388,9 @@ mod tests {
             !devices.is_empty(),
             "expected at least one audio device from list()"
         );
-        for (id, name) in &devices {
-            assert!(!id.is_empty(), "device id must not be empty");
-            assert!(!name.is_empty(), "device name must not be empty");
+        for info in &devices {
+            assert!(!info.id.is_empty(), "device id must not be empty");
+            assert!(!info.name.is_empty(), "device name must not be empty");
         }
     }
 

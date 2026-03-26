@@ -2,7 +2,7 @@ mod internal;
 
 use std::fmt;
 
-use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
+use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError, DeviceInfo};
 
 #[cfg(feature = "wasapi")]
 use std::sync::Mutex;
@@ -217,18 +217,18 @@ impl AudioDeviceTrait for AudioDevice {
             let devices = internal::wasapi::list_devices(&enumerator)?;
 
             let needle = name.to_lowercase();
-            let (id, matched_name) = devices
+            let info = devices
                 .into_iter()
-                .find(|(_, n)| n.to_lowercase().contains(&needle))
+                .find(|d| d.name.to_lowercase().contains(&needle))
                 .ok_or(AudioError::DeviceNotFound)?;
 
             // Re-resolve the IMMDevice from its ID to activate the endpoint.
-            let device = internal::wasapi::get_device_by_id(&enumerator, &id)?;
+            let device = internal::wasapi::get_device_by_id(&enumerator, &info.id)?;
             let endpoint = internal::wasapi::endpoint_volume(&device)?;
 
             Ok(Self {
-                id,
-                name: matched_name,
+                id: info.id,
+                name: info.name,
                 endpoint: Mutex::new(endpoint),
             })
         }
@@ -239,7 +239,7 @@ impl AudioDeviceTrait for AudioDevice {
         }
     }
 
-    /// Lists all available audio render devices as `(id, name)` pairs.
+    /// Lists all available audio render devices.
     ///
     /// # Errors
     ///
@@ -249,7 +249,7 @@ impl AudioDeviceTrait for AudioDevice {
     /// initialised.
     /// Returns [`AudioError::Unsupported`] when the `wasapi` feature is
     /// not enabled.
-    fn list() -> Result<Vec<(String, String)>, AudioError> {
+    fn list() -> Result<Vec<DeviceInfo>, AudioError> {
         #[cfg(feature = "wasapi")]
         {
             let _com = internal::wasapi::ComGuard::new()?;

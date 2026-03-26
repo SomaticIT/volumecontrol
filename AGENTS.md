@@ -43,7 +43,7 @@ pub trait AudioDevice: Sized {
     fn from_default()             -> Result<Self, AudioError>;
     fn from_id(id: &str)      -> Result<Self, AudioError>;
     fn from_name(name: &str)  -> Result<Self, AudioError>;
-    fn list()                 -> Result<Vec<(String, String)>, AudioError>;
+    fn list()                 -> Result<Vec<DeviceInfo>, AudioError>;
     fn get_vol(&self)         -> Result<u8, AudioError>;
     fn set_vol(&self, vol: u8)-> Result<(), AudioError>;
     fn is_mute(&self)         -> Result<bool, AudioError>;
@@ -53,14 +53,24 @@ pub trait AudioDevice: Sized {
 }
 ```
 
-`list()` returns `(id, name)` pairs.  Volume is always in the range `0..=100`.
+`list()` returns `Vec<DeviceInfo>`.  `DeviceInfo` is defined in
+`volumecontrol-core` and re-exported from the `volumecontrol` wrapper crate:
+
+```rust
+pub struct DeviceInfo {
+    pub id: String,
+    pub name: String,
+}
+```
+
+Volume is always in the range `0..=100`.
 
 `id()` returns the platform-specific unique identifier for the device — the same
-string that `list()` surfaces as the first element of each pair and that
+string that `list()` surfaces as `DeviceInfo::id` and that
 `from_id()` accepts.  The value is never empty.
 
 `name()` returns the human-readable display name for the device — the same
-string that `list()` surfaces as the second element of each pair and that
+string that `list()` surfaces as `DeviceInfo::name` and that
 `from_name()` uses for substring matching.  The value is never empty.
 
 Platform-specific identifier formats:

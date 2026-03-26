@@ -12,7 +12,7 @@
 
 mod internal;
 
-use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError};
+use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError, DeviceInfo};
 
 /// Represents a CoreAudio audio output device (macOS).
 ///
@@ -96,14 +96,17 @@ impl AudioDeviceTrait for AudioDevice {
         }
     }
 
-    fn list() -> Result<Vec<(String, String)>, AudioError> {
+    fn list() -> Result<Vec<DeviceInfo>, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
             let ids = internal::list_device_ids()?;
             let mut devices = Vec::with_capacity(ids.len());
             for raw_id in ids {
                 let name = internal::get_device_name(raw_id)?;
-                devices.push((raw_id.to_string(), name));
+                devices.push(DeviceInfo {
+                    id: raw_id.to_string(),
+                    name,
+                });
             }
             Ok(devices)
         }
@@ -228,9 +231,9 @@ mod tests {
             "expected at least one audio device from list()"
         );
         // Every entry must have a non-empty id and name.
-        for (id, name) in &devices {
-            assert!(!id.is_empty(), "device id must not be empty");
-            assert!(!name.is_empty(), "device name must not be empty");
+        for info in &devices {
+            assert!(!info.id.is_empty(), "device id must not be empty");
+            assert!(!info.name.is_empty(), "device name must not be empty");
         }
     }
 
