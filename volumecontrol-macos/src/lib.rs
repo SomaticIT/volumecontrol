@@ -77,13 +77,13 @@ impl AudioDeviceTrait for AudioDevice {
     fn from_name(name: &str) -> Result<Self, AudioError> {
         #[cfg(feature = "coreaudio")]
         {
-            // Partial, case-sensitive substring match: returns the first device
-            // whose name contains `name`.  This mirrors the behaviour of the
-            // other platform backends and gives callers flexibility (e.g. "Air"
-            // matches "AirPods Pro").
+            // Case-insensitive substring match: returns the first device
+            // whose name contains `name`.  This gives callers flexibility
+            // (e.g. "airpods" matches "AirPods Pro").
+            let name_lower = name.to_lowercase();
             for raw_id in internal::list_device_ids()? {
                 let device_name = internal::get_device_name(raw_id)?;
-                if device_name.contains(name) {
+                if device_name.to_lowercase().contains(&name_lower) {
                     return Self::from_raw_id(raw_id);
                 }
             }
@@ -265,6 +265,20 @@ mod tests {
         assert!(
             found.is_ok(),
             "from_name with partial match '{partial}' should succeed"
+        );
+    }
+
+    #[cfg(all(feature = "coreaudio", target_os = "macos"))]
+    #[test]
+    fn from_name_case_insensitive_match_returns_ok() {
+        // Convert the default device name to uppercase and verify it still
+        // matches — confirming that `from_name` is case-insensitive.
+        let default_device = AudioDevice::from_default().expect("from_default()");
+        let upper = default_device.name().to_uppercase();
+        let found = AudioDevice::from_name(&upper);
+        assert!(
+            found.is_ok(),
+            "from_name with uppercase query '{upper}' should succeed (case-insensitive)"
         );
     }
 

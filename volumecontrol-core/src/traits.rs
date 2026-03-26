@@ -20,7 +20,11 @@ pub trait AudioDevice: Sized {
     /// identifier exists, or another error if the lookup fails.
     fn from_id(id: &str) -> Result<Self, AudioError>;
 
-    /// Returns the first audio device whose name contains `name`.
+    /// Returns the first audio device whose name contains `name`
+    /// (case-insensitive substring match).
+    ///
+    /// The comparison is performed in a case-insensitive manner on all
+    /// platforms, so `"airpods"` will match `"AirPods Pro"`.
     ///
     /// # Errors
     ///

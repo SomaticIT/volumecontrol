@@ -267,7 +267,7 @@ impl PulseConnection {
     }
 
     /// Returns the first sink whose description contains `query`
-    /// (case-sensitive).
+    /// (case-insensitive substring match).
     ///
     /// # Errors
     ///
@@ -276,9 +276,10 @@ impl PulseConnection {
         &mut self,
         query: &str,
     ) -> Result<SinkSnapshot, AudioError> {
+        let query_lower = query.to_lowercase();
         self.list_sink_snapshots()?
             .into_iter()
-            .find(|s| s.description.contains(query))
+            .find(|s| s.description.to_lowercase().contains(&query_lower))
             .ok_or(AudioError::DeviceNotFound)
     }
 

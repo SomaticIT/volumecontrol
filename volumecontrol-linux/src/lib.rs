@@ -431,6 +431,21 @@ mod tests {
         );
     }
 
+    /// `from_name` must match regardless of the case of the query string.
+    #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
+    #[test]
+    fn from_name_case_insensitive_match_returns_ok() {
+        // Convert the default device name to uppercase and verify it still
+        // matches — confirming that `from_name` is case-insensitive.
+        let default_device = AudioDevice::from_default().expect("from_default()");
+        let upper = default_device.name().to_uppercase();
+        let found = AudioDevice::from_name(&upper);
+        assert!(
+            found.is_ok(),
+            "from_name with uppercase query '{upper}' should succeed (case-insensitive)"
+        );
+    }
+
     /// A description that matches no sink must return `DeviceNotFound`.
     #[cfg(all(feature = "pulseaudio", target_os = "linux"))]
     #[test]
