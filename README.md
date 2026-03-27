@@ -1,5 +1,10 @@
 # volumecontrol
 
+[![Crates.io](https://img.shields.io/crates/v/volumecontrol.svg)](https://crates.io/crates/volumecontrol)
+[![docs.rs](https://docs.rs/volumecontrol/badge.svg)](https://docs.rs/volumecontrol)
+[![CI](https://github.com/SomaticIT/volumecontrol/actions/workflows/ci-linux.yml/badge.svg)](https://github.com/SomaticIT/volumecontrol/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/SomaticIT/volumecontrol/blob/main/LICENSE)
+
 > A cross-platform Rust library for querying and controlling system audio volume.
 
 `volumecontrol` exposes a single, unified API that works on **Linux** (PulseAudio), **Windows** (WASAPI), and **macOS** (CoreAudio). The correct backend is selected automatically at compile time — no feature flags or platform-specific imports are needed in your code.
@@ -82,7 +87,7 @@ Add `volumecontrol` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-volumecontrol = { git = "https://github.com/SomaticIT/volumecontrol" }
+volumecontrol = "0.1"
 ```
 
 > **Linux users:** install the PulseAudio development headers before building:
@@ -122,7 +127,7 @@ let device = AudioDevice::from_default()?;
 // By exact device identifier returned from list()
 let device = AudioDevice::from_id("alsa_output.pci-0000_00_1f.3.analog-stereo")?;
 
-// By a partial name match (case-sensitive substring search)
+// By a partial name match (case-insensitive substring search)
 let device = AudioDevice::from_name("Speakers")?;
 ```
 
@@ -186,6 +191,7 @@ All methods return `Result<_, AudioError>`. The error variants are:
 | `GetMuteFailed`          | Could not read the mute state                |
 | `SetMuteFailed`          | Could not change the mute state              |
 | `Unsupported`            | Operation not supported on this platform     |
+| `EndpointLockPoisoned`   | A thread panicked while holding the audio endpoint lock (Windows) |
 
 ---
 

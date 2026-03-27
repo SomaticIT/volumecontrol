@@ -1,14 +1,42 @@
 //! macOS CoreAudio volume control backend.
 //!
 //! This crate exposes an [`AudioDevice`] type that implements
-//! [`volumecontrol_core::AudioDevice`].  When the `coreaudio` feature is
-//! **not** enabled every method returns [`AudioError::Unsupported`], which
-//! allows the crate to be compiled on any platform without the CoreAudio SDK.
+//! [`volumecontrol_core::AudioDevice`].  It exists primarily as an
+//! implementation detail of the
+//! [`volumecontrol`](https://crates.io/crates/volumecontrol) crate, which
+//! selects the correct backend automatically.  If cross-platform support is not
+//! a concern you may depend on this crate directly.
+//!
+//! When the `coreaudio` feature is **not** enabled every method returns
+//! [`AudioError::Unsupported`], which allows the crate to be compiled on any
+//! platform without the CoreAudio SDK.
 //!
 //! When the `coreaudio` feature **is** enabled the implementation bridges to
 //! the native macOS CoreAudio Hardware Abstraction Layer (HAL) via the
 //! `objc2_core_audio` bindings.  All unsafe interactions with CoreAudio are
 //! contained in the `internal` module.
+//!
+//! # Feature flags
+//!
+//! | Feature     | Description                                         | Requires           |
+//! |-------------|-----------------------------------------------------|--------------------|
+//! | `coreaudio` | Enable the real CoreAudio backend via `objc2-core-audio` | macOS target only |
+//!
+//! # Example
+//!
+//! ```no_run
+//! use volumecontrol_macos::AudioDevice;
+//! use volumecontrol_core::AudioDevice as _;
+//!
+//! fn main() -> Result<(), volumecontrol_core::AudioError> {
+//!     let device = AudioDevice::from_default()?;
+//!     println!("{device}");  // e.g. "MacBook Pro Speakers (73)"
+//!     println!("Current volume: {}%", device.get_vol()?);
+//!     Ok(())
+//! }
+//! ```
+
+#![deny(missing_docs)]
 
 mod internal;
 

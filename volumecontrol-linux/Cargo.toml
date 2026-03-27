@@ -5,6 +5,16 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+documentation = "https://docs.rs/volumecontrol-linux"
+readme = "README.md"
+keywords = ["audio", "volume", "pulseaudio", "linux"]
+categories = ["multimedia::audio", "os"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [dependencies]
 volumecontrol-core = { workspace = true }

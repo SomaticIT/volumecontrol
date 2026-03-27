@@ -5,6 +5,18 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+documentation = "https://docs.rs/volumecontrol-macos"
+readme = "README.md"
+keywords = ["audio", "volume", "coreaudio", "macos"]
+categories = ["multimedia::audio", "os"]
+
+[package.metadata.docs.rs]
+targets = ["x86_64-apple-darwin"]
+all-features = false
+features = []
 
 [dependencies]
 volumecontrol-core = { workspace = true }

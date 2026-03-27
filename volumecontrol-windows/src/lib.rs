@@ -1,3 +1,38 @@
+//! Windows WASAPI volume control backend.
+//!
+//! This crate exposes an [`AudioDevice`] type that implements
+//! [`volumecontrol_core::AudioDevice`].  It exists primarily as an
+//! implementation detail of the
+//! [`volumecontrol`](https://crates.io/crates/volumecontrol) crate, which
+//! selects the correct backend automatically.  If cross-platform support is not
+//! a concern you may depend on this crate directly.
+//!
+//! When the `wasapi` feature is **not** enabled every method returns
+//! [`AudioError::Unsupported`], which allows the crate to compile on any
+//! platform without the Windows SDK.
+//!
+//! # Feature flags
+//!
+//! | Feature  | Description                                    | Requires              |
+//! |----------|------------------------------------------------|-----------------------|
+//! | `wasapi` | Enable the real WASAPI backend via `windows`    | Windows target only  |
+//!
+//! # Example
+//!
+//! ```no_run
+//! use volumecontrol_windows::AudioDevice;
+//! use volumecontrol_core::AudioDevice as _;
+//!
+//! fn main() -> Result<(), volumecontrol_core::AudioError> {
+//!     let device = AudioDevice::from_default()?;
+//!     println!("{device}");  // e.g. "Speakers ({0.0.0.00000000}.{…})"
+//!     println!("Current volume: {}%", device.get_vol()?);
+//!     Ok(())
+//! }
+//! ```
+
+#![deny(missing_docs)]
+
 mod internal;
 
 use std::fmt;

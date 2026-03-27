@@ -23,6 +23,8 @@
 //! }
 //! ```
 
+#![deny(missing_docs)]
+
 use std::fmt;
 
 pub use volumecontrol_core::AudioError;

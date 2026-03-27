@@ -1,3 +1,38 @@
+//! Linux PulseAudio volume control backend.
+//!
+//! This crate exposes an [`AudioDevice`] type that implements
+//! [`volumecontrol_core::AudioDevice`].  It exists primarily as an
+//! implementation detail of the
+//! [`volumecontrol`](https://crates.io/crates/volumecontrol) crate, which
+//! selects the correct backend automatically.  If cross-platform support is not
+//! a concern you may depend on this crate directly.
+//!
+//! When the `pulseaudio` feature is **not** enabled every method returns
+//! [`AudioError::Unsupported`], which allows the crate to compile on any
+//! platform without the PulseAudio development headers.
+//!
+//! # Feature flags
+//!
+//! | Feature      | Description                                             | Requires              |
+//! |--------------|---------------------------------------------------------|-----------------------|
+//! | `pulseaudio` | Enable the real PulseAudio backend via `libpulse-binding` | `libpulse-dev` system package |
+//!
+//! # Example
+//!
+//! ```no_run
+//! use volumecontrol_linux::AudioDevice;
+//! use volumecontrol_core::AudioDevice as _;
+//!
+//! fn main() -> Result<(), volumecontrol_core::AudioError> {
+//!     let device = AudioDevice::from_default()?;
+//!     println!("{device}");  // e.g. "Built-in Audio (alsa_output.pci-…)"
+//!     println!("Current volume: {}%", device.get_vol()?);
+//!     Ok(())
+//! }
+//! ```
+
+#![deny(missing_docs)]
+
 use std::fmt;
 
 use volumecontrol_core::{AudioDevice as AudioDeviceTrait, AudioError, DeviceInfo};
