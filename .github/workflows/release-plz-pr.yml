@@ -1,0 +1,38 @@
+# Automatically opens (or updates) a "release PR" whenever main changes.
+# The PR contains version bumps and changelog entries for every crate that
+# has changed since the last release.
+#
+# Nothing is published — the actual publish happens in release-plz-release.yml
+# after the PR merges and CI is green.
+
+name: Release PR
+
+on:
+  push:
+    branches: ["main"]
+
+concurrency:
+  group: release-plz-pr
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-pr:
+    name: Open or update release PR
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run release-plz update
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
