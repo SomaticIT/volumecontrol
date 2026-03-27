@@ -44,4 +44,4 @@ fn main() -> Result<(), volumecontrol_core::AudioError> {
 
 ## License
 
-MIT — see the [LICENSE](../LICENSE) file for details.
+MIT — see the LICENSE file for details.
