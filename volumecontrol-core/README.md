@@ -32,4 +32,4 @@ println!("{err}");  // "audio device not found"
 
 ## License
 
-MIT — see the [LICENSE](../LICENSE) file for details.
+MIT — see the LICENSE file for details.
