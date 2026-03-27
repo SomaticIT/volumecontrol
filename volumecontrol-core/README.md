@@ -2,8 +2,8 @@
 
 > Core traits, errors, and shared types for the `volumecontrol` crate family.
 
-This crate defines the [`AudioDevice`] trait and the [`AudioError`] and
-[`DeviceInfo`] types that are shared across all platform backends.
+This crate defines the `AudioDevice` trait and the `AudioError` and
+`DeviceInfo` types that are shared across all platform backends.
 
 > **Note:** This crate is not intended to be used directly.  Depend on the
 > [`volumecontrol`](https://crates.io/crates/volumecontrol) crate, which
