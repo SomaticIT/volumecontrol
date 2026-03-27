@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/volumecontrol.svg)](https://crates.io/crates/volumecontrol)
 [![docs.rs](https://docs.rs/volumecontrol/badge.svg)](https://docs.rs/volumecontrol)
 [![CI](https://github.com/SomaticIT/volumecontrol/actions/workflows/ci-linux.yml/badge.svg)](https://github.com/SomaticIT/volumecontrol/actions)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/SomaticIT/volumecontrol/blob/main/LICENSE)
 
 > A cross-platform Rust library for querying and controlling system audio volume.
 
