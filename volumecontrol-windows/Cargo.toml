@@ -18,7 +18,7 @@ targets = ["x86_64-pc-windows-msvc"]
 all-features = true
 
 [dependencies]
-volumecontrol-core = { workspace = true }
+volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.0" }
 thiserror = { workspace = true }
 
 # Enabled by the `wasapi` feature; only meaningful when targeting Windows.

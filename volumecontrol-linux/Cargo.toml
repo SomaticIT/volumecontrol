@@ -17,7 +17,7 @@ categories = ["multimedia::audio", "os"]
 all-features = true
 
 [dependencies]
-volumecontrol-core = { workspace = true }
+volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.0" }
 
 # Enabled by the `pulseaudio` feature once native PulseAudio dev libraries
 # are available on the build host.
