@@ -5,7 +5,7 @@
 //!
 //! The public types mirror the Rust API:
 //!
-//! - [`JsAudioDevice`] — wraps `volumecontrol::AudioDevice` and exposes all
+//! - [`AudioDevice`] — wraps `volumecontrol::AudioDevice` and exposes all
 //!   methods as `#[napi]`-annotated functions.
 //! - [`JsDeviceInfo`] — a plain data object mirroring `volumecontrol_core::DeviceInfo`.
 
@@ -15,7 +15,7 @@ use std::fmt;
 
 use napi_derive::napi;
 
-use volumecontrol::AudioDevice;
+use volumecontrol::AudioDevice as NativeAudioDevice;
 use volumecontrol_core::AudioError;
 
 // ── Error conversion ──────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ fn to_napi_err(err: AudioError) -> napi::Error {
     napi::Error::from_reason(format!("{err}"))
 }
 
-// ── JsDeviceInfo ─────────────────────────────────────────────────────────────
+// ── DeviceInfo ─────────────────────────────────────────────────────────────
 
 /// Plain data object representing an available audio device.
 ///
@@ -36,31 +36,31 @@ fn to_napi_err(err: AudioError) -> napi::Error {
 pub struct JsDeviceInfo {
     /// Platform-specific unique identifier for the device.
     ///
-    /// Matches the value returned by [`JsAudioDevice::id`] and accepted by
-    /// [`JsAudioDevice::from_id`].
+    /// Matches the value returned by [`AudioDevice::id`] and accepted by
+    /// [`AudioDevice::from_id`].
     pub id: String,
 
     /// Human-readable display name for the device.
     ///
-    /// Matches the value returned by [`JsAudioDevice::name`] and used for
-    /// substring matching by [`JsAudioDevice::from_name`].
+    /// Matches the value returned by [`AudioDevice::name`] and used for
+    /// substring matching by [`AudioDevice::from_name`].
     pub name: String,
 }
 
-// ── JsAudioDevice ─────────────────────────────────────────────────────────────
+// ── AudioDevice ──────────────────────────────────────────────────────────────
 
 /// Cross-platform audio output device.
 ///
 /// Wraps [`volumecontrol::AudioDevice`] and exposes its API to Node.js.
 /// All fallible methods return `napi::Result<T>`, which causes the JS side
 /// to receive a thrown `Error` on failure.
-#[napi(js_name = "AudioDevice")]
-pub struct JsAudioDevice {
-    inner: AudioDevice,
+#[napi]
+pub struct AudioDevice {
+    inner: NativeAudioDevice,
 }
 
 #[napi]
-impl JsAudioDevice {
+impl AudioDevice {
     /// Returns the system default audio output device.
     ///
     /// # Errors
@@ -68,7 +68,7 @@ impl JsAudioDevice {
     /// Throws if the default device cannot be resolved.
     #[napi(factory)]
     pub fn from_default() -> napi::Result<Self> {
-        AudioDevice::from_default()
+        NativeAudioDevice::from_default()
             .map(|inner| Self { inner })
             .map_err(to_napi_err)
     }
@@ -81,7 +81,7 @@ impl JsAudioDevice {
     /// fails.
     #[napi(factory)]
     pub fn from_id(id: String) -> napi::Result<Self> {
-        AudioDevice::from_id(&id)
+        NativeAudioDevice::from_id(&id)
             .map(|inner| Self { inner })
             .map_err(to_napi_err)
     }
@@ -95,7 +95,7 @@ impl JsAudioDevice {
     /// Throws if no matching device is found, or if the lookup fails.
     #[napi(factory)]
     pub fn from_name(name: String) -> napi::Result<Self> {
-        AudioDevice::from_name(&name)
+        NativeAudioDevice::from_name(&name)
             .map(|inner| Self { inner })
             .map_err(to_napi_err)
     }
@@ -107,7 +107,7 @@ impl JsAudioDevice {
     /// Throws if the device list cannot be retrieved.
     #[napi]
     pub fn list() -> napi::Result<Vec<JsDeviceInfo>> {
-        AudioDevice::list()
+        NativeAudioDevice::list()
             .map(|devices| {
                 devices
                     .into_iter()
@@ -191,14 +191,14 @@ impl JsAudioDevice {
     /// Returns the device formatted as `"name (id)"`.
     ///
     /// Delegates to the [`fmt::Display`](std::fmt::Display) implementation of
-    /// the inner [`AudioDevice`].
+    /// the inner device.
     #[napi(js_name = "toString")]
     pub fn js_to_string(&self) -> String {
         self.inner.to_string()
     }
 }
 
-impl fmt::Display for JsAudioDevice {
+impl fmt::Display for AudioDevice {
     /// Formats the device as `"name (id)"`, e.g. `"Speakers ({0.0.0.…}.{…})"`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.inner.fmt(f)
