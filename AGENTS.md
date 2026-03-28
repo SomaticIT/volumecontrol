@@ -158,6 +158,41 @@ cargo fmt --all
 
 ---
 
+## Commit messages
+
+All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/)
+specification.  The format is:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Common types:
+
+| Type       | When to use                                          |
+|------------|------------------------------------------------------|
+| `feat`     | A new feature                                        |
+| `fix`      | A bug fix                                            |
+| `docs`     | Documentation-only changes                           |
+| `refactor` | Code change that is neither a fix nor a feature      |
+| `test`     | Adding or correcting tests                           |
+| `chore`    | Build process, dependency, or tooling changes        |
+
+Example:
+
+```
+feat(linux): implement set_vol using PulseAudio sink input volume
+```
+
+Breaking changes must be indicated by appending `!` after the type/scope
+(e.g. `feat!: …`) or by adding a `BREAKING CHANGE:` footer in the commit body.
+
+---
+
 ## Coding style
 
 - Follow the [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/).
