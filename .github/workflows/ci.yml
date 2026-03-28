@@ -1,0 +1,535 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  # No path filters — always triggers so branch protection is never blocked
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Path detection (runs once) ───────────────────────────────────────
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      linux: ${{ steps.filter.outputs.linux }}
+      windows: ${{ steps.filter.outputs.windows }}
+      macos: ${{ steps.filter.outputs.macos }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            linux:
+              - "volumecontrol-linux/**"
+              - "volumecontrol-core/**"
+              - "volumecontrol/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/workflows/ci.yml"
+            windows:
+              - "volumecontrol-windows/**"
+              - "volumecontrol-core/**"
+              - "volumecontrol/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/workflows/ci.yml"
+            macos:
+              - "volumecontrol-macos/**"
+              - "volumecontrol-core/**"
+              - "volumecontrol/**"
+              - "Cargo.toml"
+              - "Cargo.lock"
+              - ".github/workflows/ci.yml"
+
+  # ── Quality gate (always runs, fast) ─────────────────────────────────
+  fmt:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable with rustfmt
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: cargo fmt --check
+        run: cargo fmt --all -- --check
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry and tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-audit
+          key: ${{ runner.os }}-cargo-audit-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-audit-
+      - name: Install cargo-audit
+        run: command -v cargo-audit || cargo install cargo-audit --locked
+      - name: cargo audit
+        run: cargo audit
+
+  # ── Linux CI (only if linux paths changed) ───────────────────────────
+  # All Linux jobs need: [changes, fmt, audit]
+  # Use: if: needs.changes.outputs.linux == 'true'
+
+  linux-native:
+    name: Linux native (x86_64-unknown-linux-gnu)
+    needs: [changes, fmt, audit]
+    if: needs.changes.outputs.linux == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-native-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-native-
+      - name: Install PulseAudio development libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libpulse-dev libasound2-dev \
+            pulseaudio pulseaudio-utils
+      - name: Start PulseAudio with a virtual null sink
+        run: |
+          mkdir -p /tmp/pa-runtime
+          echo "XDG_RUNTIME_DIR=/tmp/pa-runtime" >> "$GITHUB_ENV"
+          XDG_RUNTIME_DIR=/tmp/pa-runtime pulseaudio --start --exit-idle-time=-1
+          sleep 1
+          XDG_RUNTIME_DIR=/tmp/pa-runtime pactl load-module module-null-sink \
+            sink_name=VirtualSink \
+            sink_properties=device.description=Virtual_Sink
+          XDG_RUNTIME_DIR=/tmp/pa-runtime pactl set-default-sink VirtualSink
+      - name: cargo clippy volumecontrol-linux (no features)
+        run: >
+          cargo clippy
+          -p volumecontrol-linux
+          --all-targets
+          -- -D warnings
+      - name: cargo clippy volumecontrol-linux (pulseaudio feature)
+        run: >
+          cargo clippy
+          -p volumecontrol-linux
+          --features pulseaudio
+          --all-targets
+          -- -D warnings
+      - name: cargo build volumecontrol-linux (no features)
+        run: cargo build -p volumecontrol-linux
+      - name: cargo build volumecontrol-linux (pulseaudio feature)
+        run: cargo build -p volumecontrol-linux --features pulseaudio
+      - name: cargo test volumecontrol-linux (no features)
+        run: cargo test -p volumecontrol-linux
+      - name: cargo test volumecontrol-linux (pulseaudio feature)
+        run: cargo test -p volumecontrol-linux --features pulseaudio -- --test-threads=1
+      - name: cargo clippy volumecontrol
+        run: >
+          cargo clippy
+          -p volumecontrol
+          --all-targets
+          -- -D warnings
+      - name: cargo build volumecontrol
+        run: cargo build -p volumecontrol
+      - name: cargo test volumecontrol
+        run: cargo test -p volumecontrol -- --test-threads=1
+
+  linux-doc:
+    name: cargo doc (Linux)
+    needs: [changes, fmt, audit]
+    if: needs.changes.outputs.linux == 'true'
+    runs-on: ubuntu-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-doc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-doc-
+      - name: Install PulseAudio development libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libpulse-dev libasound2-dev
+      - name: cargo doc
+        run: >
+          cargo doc
+          -p volumecontrol-core
+          -p volumecontrol-linux
+          -p volumecontrol
+          --features volumecontrol-linux/pulseaudio
+          --no-deps
+
+  linux-cross:
+    name: Linux cross (${{ matrix.target }})
+    needs: [changes, fmt, audit]
+    if: needs.changes.outputs.linux == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-unknown-linux-gnu
+            can_build: true
+          - target: armv7-unknown-linux-gnueabihf
+            can_build: true
+          - target: x86_64-unknown-linux-musl
+            can_build: false
+          - target: aarch64-unknown-linux-musl
+            can_build: false
+          - target: armv7-unknown-linux-musleabihf
+            can_build: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-cross-${{ matrix.target }}-
+      - name: Cache cross binary
+        id: cache-cross
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cross
+          key: cross-${{ runner.os }}-${{ runner.arch }}
+      - name: Install cross
+        if: steps.cache-cross.outputs.cache-hit != 'true'
+        run: cargo install cross --locked
+      - name: cross check volumecontrol-linux (no features)
+        run: >
+          cross check
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+      - name: cross check volumecontrol-linux (pulseaudio feature)
+        run: >
+          cross check
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+          --features pulseaudio
+      - name: cross build volumecontrol-linux (no features)
+        if: matrix.can_build
+        run: >
+          cross build
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+      - name: cross build volumecontrol-linux (pulseaudio feature)
+        if: matrix.can_build
+        run: >
+          cross build
+          -p volumecontrol-linux
+          --target ${{ matrix.target }}
+          --features pulseaudio
+      - name: cross check volumecontrol
+        run: >
+          cross check
+          -p volumecontrol
+          --target ${{ matrix.target }}
+      - name: cross build volumecontrol
+        if: matrix.can_build
+        run: >
+          cross build
+          -p volumecontrol
+          --target ${{ matrix.target }}
+
+  # ── Windows CI (only if windows paths changed) ───────────────────────
+  windows:
+    name: Windows (${{ matrix.target }})
+    needs: [changes, fmt, audit]
+    if: needs.changes.outputs.windows == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+            virtual_audio: true
+          - target: i686-pc-windows-msvc
+            runner: windows-latest
+            virtual_audio: false
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+            virtual_audio: false
+    env:
+      VAD_VERSION: "25.7.14"
+      NEFCON_VERSION: "v1.17.40"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Add cross-compilation target
+        run: rustup target add ${{ matrix.target }}
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
+      - name: Cache Virtual Audio Driver + nefcon downloads
+        id: cache-vad
+        if: matrix.virtual_audio
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ runner.temp }}\virtual-audio-driver.zip
+            ${{ runner.temp }}\nefcon.zip
+          key: windows-vad-${{ env.VAD_VERSION }}-nefcon-${{ env.NEFCON_VERSION }}
+      - name: Download Virtual Audio Driver + nefcon (if not cached)
+        if: matrix.virtual_audio && steps.cache-vad.outputs.cache-hit != 'true'
+        shell: powershell
+        run: |
+          Invoke-WebRequest `
+            -Uri "https://github.com/VirtualDrivers/Virtual-Audio-Driver/releases/download/$env:VAD_VERSION/Virtual.Audio.Driver.Signed.-.$env:VAD_VERSION.zip" `
+            -OutFile "$env:RUNNER_TEMP\virtual-audio-driver.zip"
+          Invoke-WebRequest `
+            -Uri "https://github.com/nefarius/nefcon/releases/download/$env:NEFCON_VERSION/nefcon_$env:NEFCON_VERSION.zip" `
+            -OutFile "$env:RUNNER_TEMP\nefcon.zip"
+      - name: Install Virtual Audio Driver
+        if: matrix.virtual_audio
+        shell: powershell
+        run: |
+          bcdedit /set testsigning on
+          $vadZip = "$env:RUNNER_TEMP\virtual-audio-driver.zip"
+          $vadDir = "$env:RUNNER_TEMP\virtual-audio-driver"
+          Expand-Archive -Path $vadZip -DestinationPath $vadDir
+          $signature = Get-AuthenticodeSignature "$vadDir\Virtual Audio Driver\virtualaudiodriver.cat"
+          $store = Get-Item -Path Cert:\LocalMachine\TrustedPublisher
+          $store.Open("ReadWrite")
+          $store.Add($signature.SignerCertificate)
+          $store.Close()
+          $nefconZip = "$env:RUNNER_TEMP\nefcon.zip"
+          $nefconDir = "$env:RUNNER_TEMP\nefcon"
+          Expand-Archive -Path $nefconZip -DestinationPath $nefconDir
+          $nefconc = "$nefconDir\x64\nefconc.exe"
+          & $nefconc --create-device-node `
+            --hardware-id root\virtualaudiodriver `
+            --class-name MEDIA `
+            --class-guid 4d36e96c-e325-11ce-bfc1-08002be10318
+          & $nefconc --install-driver --inf-path "$vadDir\Virtual Audio Driver\VirtualAudioDriver.inf"
+      - name: Clippy volumecontrol-windows
+        run: >
+          cargo clippy
+          -p volumecontrol-windows
+          --all-targets
+          --all-features
+          --target ${{ matrix.target }}
+          -- -D warnings
+      - name: Build volumecontrol-windows (no feature)
+        run: cargo build -p volumecontrol-windows --target ${{ matrix.target }}
+      - name: Build volumecontrol-windows (wasapi feature)
+        run: cargo build -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
+      - name: Test volumecontrol-windows (no feature)
+        run: cargo test -p volumecontrol-windows --target ${{ matrix.target }}
+      - name: Test volumecontrol-windows (wasapi feature)
+        if: matrix.virtual_audio
+        run: cargo test -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
+      - name: Build tests volumecontrol-windows (wasapi feature, no execute)
+        if: "!matrix.virtual_audio"
+        run: cargo test -p volumecontrol-windows --features wasapi --target ${{ matrix.target }} --no-run
+      - name: Clippy volumecontrol
+        run: >
+          cargo clippy
+          -p volumecontrol
+          --all-targets
+          --target ${{ matrix.target }}
+          -- -D warnings
+      - name: Build volumecontrol
+        run: cargo build -p volumecontrol --target ${{ matrix.target }}
+      - name: Test volumecontrol
+        if: matrix.virtual_audio
+        run: cargo test -p volumecontrol --target ${{ matrix.target }}
+      - name: Build tests volumecontrol (no execute)
+        if: "!matrix.virtual_audio"
+        run: cargo test -p volumecontrol --target ${{ matrix.target }} --no-run
+
+  windows-doc:
+    name: cargo doc (Windows)
+    needs: [changes, fmt, audit]
+    if: needs.changes.outputs.windows == 'true'
+    runs-on: windows-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-doc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-doc-
+      - name: cargo doc
+        run: >
+          cargo doc
+          -p volumecontrol-core
+          -p volumecontrol-windows
+          -p volumecontrol
+          --features volumecontrol-windows/wasapi
+          --no-deps
+
+  # ── macOS CI (only if macos paths changed) ───────────────────────────
+  macos:
+    name: macOS (${{ matrix.target }})
+    needs: [changes, fmt, audit]
+    if: needs.changes.outputs.macos == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Cache Cargo registry & build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
+      - name: cargo clippy volumecontrol-macos
+        run: >
+          cargo clippy -p volumecontrol-macos
+          --all-features
+          --target ${{ matrix.target }}
+          --all-targets
+          -- -D warnings
+      - name: cargo test volumecontrol-macos (no features)
+        run: cargo test -p volumecontrol-macos --target ${{ matrix.target }}
+      - name: cargo test volumecontrol-macos (coreaudio feature)
+        run: cargo test -p volumecontrol-macos --features coreaudio --target ${{ matrix.target }}
+      - name: cargo clippy volumecontrol
+        run: >
+          cargo clippy -p volumecontrol
+          --target ${{ matrix.target }}
+          --all-targets
+          -- -D warnings
+      - name: cargo test volumecontrol
+        run: cargo test -p volumecontrol --target ${{ matrix.target }}
+      - name: Build release slice (coreaudio feature)
+        run: >
+          cargo build -p volumecontrol-macos
+          --features coreaudio
+          --target ${{ matrix.target }}
+          --release
+      - name: Upload release rlib
+        uses: actions/upload-artifact@v4
+        with:
+          name: rlib-${{ matrix.target }}
+          path: target/${{ matrix.target }}/release/libvolumecontrol_macos.rlib
+          retention-days: 1
+
+  macos-universal:
+    name: macOS universal binary (x86_64 + aarch64)
+    needs: [changes, macos]
+    if: needs.changes.outputs.macos == 'true'
+    runs-on: macos-latest
+    permissions: {}
+    steps:
+      - name: Download x86_64 slice
+        uses: actions/download-artifact@v4
+        with:
+          name: rlib-x86_64-apple-darwin
+          path: target/x86_64-apple-darwin/release/
+      - name: Download aarch64 slice
+        uses: actions/download-artifact@v4
+        with:
+          name: rlib-aarch64-apple-darwin
+          path: target/aarch64-apple-darwin/release/
+      - name: Combine into universal library with lipo
+        run: |
+          lipo -create \
+            target/x86_64-apple-darwin/release/libvolumecontrol_macos.rlib \
+            target/aarch64-apple-darwin/release/libvolumecontrol_macos.rlib \
+            -output target/libvolumecontrol_macos_universal.rlib
+      - name: Verify universal binary architectures
+        run: lipo -info target/libvolumecontrol_macos_universal.rlib
+
+  macos-doc:
+    name: cargo doc (macOS)
+    needs: [changes, fmt, audit]
+    if: needs.changes.outputs.macos == 'true'
+    runs-on: macos-latest
+    env:
+      RUSTDOCFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-doc-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-doc-
+      - name: cargo doc
+        run: >
+          cargo doc
+          -p volumecontrol-core
+          -p volumecontrol-macos
+          -p volumecontrol
+          --features volumecontrol-macos/coreaudio
+          --no-deps
