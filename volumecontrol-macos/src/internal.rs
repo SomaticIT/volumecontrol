@@ -12,11 +12,12 @@ use std::mem;
 use std::ptr::NonNull;
 
 use objc2_core_audio::{
-    kAudioDevicePropertyMute, kAudioDevicePropertyVolumeScalar, kAudioHardwareNoError,
-    kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices,
-    kAudioObjectPropertyElementMain, kAudioObjectPropertyName, kAudioObjectPropertyScopeGlobal,
-    kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject, AudioObjectGetPropertyData,
-    AudioObjectGetPropertyDataSize, AudioObjectPropertyAddress, AudioObjectSetPropertyData,
+    kAudioDevicePropertyMute, kAudioDevicePropertyStreams, kAudioDevicePropertyVolumeScalar,
+    kAudioHardwareNoError, kAudioHardwarePropertyDefaultOutputDevice,
+    kAudioHardwarePropertyDevices, kAudioObjectPropertyElementMain, kAudioObjectPropertyName,
+    kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyScopeOutput, kAudioObjectSystemObject,
+    AudioObjectGetPropertyData, AudioObjectGetPropertyDataSize, AudioObjectPropertyAddress,
+    AudioObjectSetPropertyData,
 };
 use objc2_core_foundation::{CFRetained, CFString};
 
@@ -97,7 +98,24 @@ pub(crate) fn get_default_device_id() -> Result<AudioObjectID, AudioError> {
     Ok(device_id)
 }
 
-/// Lists all `AudioObjectID`s registered as audio devices with CoreAudio.
+/// Returns `true` if the audio device `id` has at least one output stream.
+///
+/// Queries `kAudioDevicePropertyStreams` on `kAudioObjectPropertyScopeOutput`;
+/// a non-zero data size means the device exposes at least one output stream,
+/// making it an output (playback) device.  Input-only devices return 0 bytes.
+pub(crate) fn is_output_device(id: AudioObjectID) -> bool {
+    let mut address = AudioObjectPropertyAddress {
+        mSelector: kAudioDevicePropertyStreams,
+        mScope: kAudioObjectPropertyScopeOutput,
+        mElement: kAudioObjectPropertyElementMain,
+    };
+    // SAFETY: address is a valid local struct; the helper only reads it.
+    let byte_count = unsafe { get_property_data_size(id, &mut address) };
+    matches!(byte_count, Ok(n) if n > 0)
+}
+
+/// Lists the `AudioObjectID`s of all output (playback) devices registered with
+/// CoreAudio.  Input-only devices are excluded.
 ///
 /// # Errors
 ///
@@ -135,7 +153,10 @@ pub(crate) fn list_device_ids() -> Result<Vec<AudioObjectID>, AudioError> {
             "AudioObjectGetPropertyData for device list failed with status {status}"
         )));
     }
-    Ok(ids)
+
+    // Filter to output devices only; this matches the behavior of the Linux
+    // and Windows backends which never surface input-only devices.
+    Ok(ids.into_iter().filter(|&id| is_output_device(id)).collect())
 }
 
 /// Returns the human-readable name of the audio device identified by `id`.
@@ -380,6 +401,28 @@ mod tests {
         assert!(
             !ids.unwrap().is_empty(),
             "expected at least one audio device"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn device_list_contains_only_output_devices() {
+        let ids = list_device_ids().expect("list_device_ids()");
+        for id in ids {
+            assert!(
+                is_output_device(id),
+                "device {id} returned by list_device_ids() must be an output device"
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn default_device_is_output_device() {
+        let id = get_default_device_id().expect("default device");
+        assert!(
+            is_output_device(id),
+            "default output device {id} must be detected as an output device"
         );
     }
 
