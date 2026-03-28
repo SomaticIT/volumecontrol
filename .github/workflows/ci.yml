@@ -352,6 +352,14 @@ jobs:
             --class-name MEDIA `
             --class-guid 4d36e96c-e325-11ce-bfc1-08002be10318
           & $nefconc --install-driver --inf-path "$vadDir\Virtual Audio Driver\VirtualAudioDriver.inf"
+      - name: Clippy volumecontrol-windows
+        run: >
+          cargo clippy
+          -p volumecontrol-windows
+          --all-targets
+          --all-features
+          --target ${{ matrix.target }}
+          -- -D warnings
       - name: Check volumecontrol-windows (no feature)
         run: cargo check -p volumecontrol-windows --target ${{ matrix.target }}
       - name: Check volumecontrol-windows (wasapi feature)
@@ -368,12 +376,11 @@ jobs:
       - name: Build tests volumecontrol-windows (wasapi feature, no execute)
         if: "!matrix.virtual_audio"
         run: cargo test -p volumecontrol-windows --features wasapi --target ${{ matrix.target }} --no-run
-      - name: Clippy volumecontrol-windows
+      - name: Clippy volumecontrol
         run: >
           cargo clippy
-          -p volumecontrol-windows
+          -p volumecontrol
           --all-targets
-          --all-features
           --target ${{ matrix.target }}
           -- -D warnings
       - name: Check volumecontrol
@@ -386,13 +393,6 @@ jobs:
       - name: Build tests volumecontrol (no execute)
         if: "!matrix.virtual_audio"
         run: cargo test -p volumecontrol --target ${{ matrix.target }} --no-run
-      - name: Clippy volumecontrol
-        run: >
-          cargo clippy
-          -p volumecontrol
-          --all-targets
-          --target ${{ matrix.target }}
-          -- -D warnings
 
   windows-doc:
     name: cargo doc (Windows)
@@ -453,6 +453,13 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
+      - name: cargo clippy volumecontrol-macos (coreaudio feature)
+        run: >
+          cargo clippy -p volumecontrol-macos
+          --features coreaudio
+          --target ${{ matrix.target }}
+          --all-targets
+          -- -D warnings
       - name: cargo check volumecontrol-macos (no features)
         run: cargo check -p volumecontrol-macos --target ${{ matrix.target }}
       - name: cargo check volumecontrol-macos (coreaudio feature)
@@ -461,10 +468,9 @@ jobs:
         run: cargo test -p volumecontrol-macos --target ${{ matrix.target }}
       - name: cargo test volumecontrol-macos (coreaudio feature)
         run: cargo test -p volumecontrol-macos --features coreaudio --target ${{ matrix.target }}
-      - name: cargo clippy volumecontrol-macos (coreaudio feature)
+      - name: cargo clippy volumecontrol
         run: >
-          cargo clippy -p volumecontrol-macos
-          --features coreaudio
+          cargo clippy -p volumecontrol
           --target ${{ matrix.target }}
           --all-targets
           -- -D warnings
@@ -472,12 +478,6 @@ jobs:
         run: cargo check -p volumecontrol --target ${{ matrix.target }}
       - name: cargo test volumecontrol
         run: cargo test -p volumecontrol --target ${{ matrix.target }}
-      - name: cargo clippy volumecontrol
-        run: >
-          cargo clippy -p volumecontrol
-          --target ${{ matrix.target }}
-          --all-targets
-          -- -D warnings
       - name: Build release slice (coreaudio feature)
         run: >
           cargo build -p volumecontrol-macos
