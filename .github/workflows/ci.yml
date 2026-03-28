@@ -360,10 +360,6 @@ jobs:
           --all-features
           --target ${{ matrix.target }}
           -- -D warnings
-      - name: Check volumecontrol-windows (no feature)
-        run: cargo check -p volumecontrol-windows --target ${{ matrix.target }}
-      - name: Check volumecontrol-windows (wasapi feature)
-        run: cargo check -p volumecontrol-windows --features wasapi --target ${{ matrix.target }}
       - name: Build volumecontrol-windows (no feature)
         run: cargo build -p volumecontrol-windows --target ${{ matrix.target }}
       - name: Build volumecontrol-windows (wasapi feature)
@@ -383,8 +379,6 @@ jobs:
           --all-targets
           --target ${{ matrix.target }}
           -- -D warnings
-      - name: Check volumecontrol
-        run: cargo check -p volumecontrol --target ${{ matrix.target }}
       - name: Build volumecontrol
         run: cargo build -p volumecontrol --target ${{ matrix.target }}
       - name: Test volumecontrol
@@ -453,17 +447,13 @@ jobs:
             target
           key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: ${{ runner.os }}-cargo-${{ matrix.target }}-
-      - name: cargo clippy volumecontrol-macos (coreaudio feature)
+      - name: cargo clippy volumecontrol-macos
         run: >
           cargo clippy -p volumecontrol-macos
-          --features coreaudio
+          --all-features
           --target ${{ matrix.target }}
           --all-targets
           -- -D warnings
-      - name: cargo check volumecontrol-macos (no features)
-        run: cargo check -p volumecontrol-macos --target ${{ matrix.target }}
-      - name: cargo check volumecontrol-macos (coreaudio feature)
-        run: cargo check -p volumecontrol-macos --features coreaudio --target ${{ matrix.target }}
       - name: cargo test volumecontrol-macos (no features)
         run: cargo test -p volumecontrol-macos --target ${{ matrix.target }}
       - name: cargo test volumecontrol-macos (coreaudio feature)
@@ -474,8 +464,6 @@ jobs:
           --target ${{ matrix.target }}
           --all-targets
           -- -D warnings
-      - name: cargo check volumecontrol
-        run: cargo check -p volumecontrol --target ${{ matrix.target }}
       - name: cargo test volumecontrol
         run: cargo test -p volumecontrol --target ${{ matrix.target }}
       - name: Build release slice (coreaudio feature)
