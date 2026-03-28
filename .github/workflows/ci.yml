@@ -533,3 +533,91 @@ jobs:
           -p volumecontrol
           --features volumecontrol-macos/coreaudio
           --no-deps
+
+  # ── Status gate jobs (fixed names for branch protection) ─────────────
+  #
+  # These always run and report a predictable check name.
+  # They pass if all upstream jobs succeeded or were skipped.
+  # They fail if any upstream job failed or was cancelled.
+
+  quality-ok:
+    name: Quality
+    if: always()
+    needs: [fmt, audit]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          results=( \
+            "${{ needs.fmt.result }}" \
+            "${{ needs.audit.result }}" \
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" && "$r" != "skipped" ]]; then
+              echo "❌ Quality check failed: $r"
+              exit 1
+            fi
+          done
+          echo "✅ All quality checks passed"
+
+  linux-ok:
+    name: Linux CI
+    if: always()
+    needs: [linux-native, linux-doc, linux-cross]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          results=( \
+            "${{ needs.linux-native.result }}" \
+            "${{ needs.linux-doc.result }}" \
+            "${{ needs.linux-cross.result }}" \
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" && "$r" != "skipped" ]]; then
+              echo "❌ Linux CI failed: $r"
+              exit 1
+            fi
+          done
+          echo "✅ All Linux jobs passed or were skipped"
+
+  windows-ok:
+    name: Windows CI
+    if: always()
+    needs: [windows, windows-doc]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          results=( \
+            "${{ needs.windows.result }}" \
+            "${{ needs.windows-doc.result }}" \
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" && "$r" != "skipped" ]]; then
+              echo "❌ Windows CI failed: $r"
+              exit 1
+            fi
+          done
+          echo "✅ All Windows jobs passed or were skipped"
+
+  macos-ok:
+    name: macOS CI
+    if: always()
+    needs: [macos, macos-universal, macos-doc]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check results
+        run: |
+          results=( \
+            "${{ needs.macos.result }}" \
+            "${{ needs.macos-universal.result }}" \
+            "${{ needs.macos-doc.result }}" \
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" && "$r" != "skipped" ]]; then
+              echo "❌ macOS CI failed: $r"
+              exit 1
+            fi
+          done
+          echo "✅ All macOS jobs passed or were skipped"
