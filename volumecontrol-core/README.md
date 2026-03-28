@@ -30,6 +30,10 @@ let err = AudioError::DeviceNotFound;
 println!("{err}");  // "audio device not found"
 ```
 
+## Built with AI
+
+This crate is part of the `volumecontrol` workspace, which was built **100% with [GitHub Copilot](https://github.com/features/copilot)** (Claude Opus & Claude Sonnet) as an experiment in AI-driven development of a production-ready Rust crate.
+
 ## License
 
 MIT — see the LICENSE file for details.

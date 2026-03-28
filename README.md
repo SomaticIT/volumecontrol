@@ -260,6 +260,14 @@ Push your branch and open a pull request against `main`. Describe _what_ you cha
 
 ---
 
+## Built with AI
+
+This project was built **100% with [GitHub Copilot](https://github.com/features/copilot)** (Claude Opus & Claude Sonnet models) as an experiment in driving an AI to produce a production-ready Rust crate — from architecture and API design to platform-specific backends, CI pipelines, and documentation.
+
+No human wrote any Rust source code directly; every implementation decision, refactor, and fix was produced by the AI under human direction.
+
+---
+
 ## License
 
 This project is licensed under the **MIT License**.  
