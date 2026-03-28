@@ -9,16 +9,15 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/SomaticIT/volumecontrol"
-homepage = "https://github.com/SomaticIT/volumecontrol"
+repository = "https://github.com/touchifyapp/volumecontrol"
+homepage = "https://github.com/touchifyapp/volumecontrol"
 authors = ["SomaticIT <github@somatic.it>"]
 rust-version = "1.85.0"
 
 [workspace.dependencies]
-volumecontrol-core = { path = "volumecontrol-core" }
+volumecontrol-core = { path = "volumecontrol-core", version = "0.1.0" }
 thiserror = "2.0"
 
 # ── cross cross-compilation configuration ────────────────────────────────────

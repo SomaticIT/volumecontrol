@@ -1,0 +1,12 @@
+# release-plz configuration
+# See https://release-plz.ieni.dev/docs/config
+
+[workspace]
+# Use conventional commits to determine version bumps
+changelog_update = true
+# Add a delay between publishing dependent crates to let crates.io index catch up
+publish_timeout = "30s"
+# Only create git tags, don't create GitHub releases (set to true if you want them)
+git_release_enable = true
+# Tag format: crate_name-vX.Y.Z  (important for multi-crate workspaces)
+git_tag_enable = true
