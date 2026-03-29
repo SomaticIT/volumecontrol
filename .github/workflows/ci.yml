@@ -36,6 +36,7 @@ jobs:
               - "volumecontrol-linux/**"
               - "volumecontrol-core/**"
               - "volumecontrol/**"
+              - "volumecontrol-napi/**"
               - "Cargo.toml"
               - "Cargo.lock"
               - ".github/workflows/ci.yml"
@@ -43,6 +44,7 @@ jobs:
               - "volumecontrol-windows/**"
               - "volumecontrol-core/**"
               - "volumecontrol/**"
+              - "volumecontrol-napi/**"
               - "Cargo.toml"
               - "Cargo.lock"
               - ".github/workflows/ci.yml"
@@ -50,6 +52,7 @@ jobs:
               - "volumecontrol-macos/**"
               - "volumecontrol-core/**"
               - "volumecontrol/**"
+              - "volumecontrol-napi/**"
               - "Cargo.toml"
               - "Cargo.lock"
               - ".github/workflows/ci.yml"
@@ -159,6 +162,19 @@ jobs:
         run: cargo build -p volumecontrol
       - name: cargo test volumecontrol
         run: cargo test -p volumecontrol -- --test-threads=1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: npm install (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npm install
+      - name: napi build (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npm run build
+      - name: npm test (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npm test
 
   linux-doc:
     name: cargo doc (Linux)
@@ -269,6 +285,12 @@ jobs:
         run: >
           cross build
           -p volumecontrol
+          --target ${{ matrix.target }}
+      - name: cross build volumecontrol-napi
+        if: matrix.can_build
+        run: >
+          cross build
+          -p volumecontrol-napi
           --target ${{ matrix.target }}
 
   # ── Windows CI (only if windows paths changed) ───────────────────────
@@ -387,6 +409,20 @@ jobs:
       - name: Build tests volumecontrol (no execute)
         if: "!matrix.virtual_audio"
         run: cargo test -p volumecontrol --target ${{ matrix.target }} --no-run
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: npm install (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npm install
+      - name: napi build (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npx napi build --platform --target ${{ matrix.target }} --release
+      - name: npm test (volumecontrol-napi)
+        if: matrix.virtual_audio
+        working-directory: volumecontrol-napi
+        run: npm test
 
   windows-doc:
     name: cargo doc (Windows)
@@ -478,6 +514,19 @@ jobs:
           name: rlib-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/libvolumecontrol_macos.rlib
           retention-days: 1
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - name: npm install (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npm install
+      - name: napi build (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npx napi build --platform --target ${{ matrix.target }} --release
+      - name: npm test (volumecontrol-napi)
+        working-directory: volumecontrol-napi
+        run: npm test
 
   macos-universal:
     name: macOS universal binary (x86_64 + aarch64)
