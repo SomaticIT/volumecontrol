@@ -57,6 +57,11 @@ pre-build = [
     "chmod +x /usr/local/bin/aarch64-unknown-linux-gnu-pkg-config",
 ]
 
+[workspace.metadata.cross.target.aarch64-unknown-linux-gnu.env]
+# Pass the aarch64 library directory to the linker so that the napi addon
+# (.so) can be linked against libpulse when cross-compiling for this target.
+set = { RUSTFLAGS = "-L /usr/lib/aarch64-linux-gnu" }
+
 [workspace.metadata.cross.target.armv7-unknown-linux-gnueabihf]
 pre-build = [
     "dpkg --add-architecture $CROSS_DEB_ARCH",
@@ -65,6 +70,11 @@ pre-build = [
     "echo 'PKG_CONFIG_LIBDIR=/usr/lib/arm-linux-gnueabihf/pkgconfig PKG_CONFIG_ALLOW_CROSS=1 exec pkg-config \"$@\"' >> /usr/local/bin/armv7-unknown-linux-gnueabihf-pkg-config",
     "chmod +x /usr/local/bin/armv7-unknown-linux-gnueabihf-pkg-config",
 ]
+
+[workspace.metadata.cross.target.armv7-unknown-linux-gnueabihf.env]
+# Pass the armhf library directory to the linker so that the napi addon
+# (.so) can be linked against libpulse when cross-compiling for this target.
+set = { RUSTFLAGS = "-L /usr/lib/arm-linux-gnueabihf" }
 
 # ── musl targets (check only, with and without the pulseaudio feature) ────────
 #
