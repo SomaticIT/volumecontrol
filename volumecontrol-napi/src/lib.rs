@@ -7,7 +7,7 @@
 //!
 //! - [`AudioDevice`] — wraps `volumecontrol::AudioDevice` and exposes all
 //!   methods as `#[napi]`-annotated functions.
-//! - [`JsDeviceInfo`] — a plain data object mirroring `volumecontrol_core::DeviceInfo`.
+//! - [`DeviceInfo`] — a plain data object mirroring `volumecontrol_core::DeviceInfo`.
 
 #![deny(clippy::all)]
 
@@ -32,8 +32,8 @@ fn to_napi_err(err: AudioError) -> napi::Error {
 ///
 /// Mirrors [`volumecontrol_core::DeviceInfo`].  Exposed to JS as a plain
 /// object with `id` and `name` string properties.
-#[napi(object, js_name = "DeviceInfo")]
-pub struct JsDeviceInfo {
+#[napi(object)]
+pub struct DeviceInfo {
     /// Platform-specific unique identifier for the device.
     ///
     /// Matches the value returned by [`AudioDevice::id`] and accepted by
@@ -106,12 +106,12 @@ impl AudioDevice {
     ///
     /// Throws if the device list cannot be retrieved.
     #[napi]
-    pub fn list() -> napi::Result<Vec<JsDeviceInfo>> {
+    pub fn list() -> napi::Result<Vec<DeviceInfo>> {
         NativeAudioDevice::list()
             .map(|devices| {
                 devices
                     .into_iter()
-                    .map(|d| JsDeviceInfo {
+                    .map(|d| DeviceInfo {
                         id: d.id,
                         name: d.name,
                     })
