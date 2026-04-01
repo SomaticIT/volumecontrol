@@ -191,15 +191,30 @@ jobs:
         working-directory: volumecontrol-napi
         run: ls -R ./npm
 
+      - name: Publish platform packages to GitHub Release
+        if: github.event_name == 'push'
+        working-directory: volumecontrol-napi
+        run: |
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${{ github.ref_name }} --jq '.id')
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "::error::Could not find GitHub release for tag ${{ github.ref_name }}"
+            exit 1
+          fi
+          npx napi prepublish -t npm --gh-release-id "$RELEASE_ID"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish main package
-        if: github.event_name != 'workflow_dispatch'
+        if: github.event_name == 'push'
         working-directory: volumecontrol-napi
         run: |
           npm config set provenance true
-          if echo "${{ github.ref }}" | grep -qE "refs/tags/volumecontrol-napi-v[0-9]+\.[0-9]+\.[0-9]+$"; then
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#volumecontrol-napi-v}"
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
             npm publish --access public
-          elif echo "${{ github.ref }}" | grep -qE "refs/tags/volumecontrol-napi-v[0-9]+\.[0-9]+\.[0-9]+"; then
+          elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
             echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
             npm publish --tag next --access public
           else
