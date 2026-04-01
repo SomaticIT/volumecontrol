@@ -156,6 +156,10 @@ jobs:
         working-directory: volumecontrol-napi
         run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version
 
+      - name: Create npm platform directories
+        working-directory: volumecontrol-napi
+        run: npx napi create-npm-dirs
+
       - name: Download all binary artifacts
         uses: actions/download-artifact@v8
         with:
