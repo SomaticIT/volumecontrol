@@ -19,8 +19,3 @@ name = "volumecontrol-napi"
 changelog_update = true
 git_tag_enable = true
 git_release_enable = true
-publish = false
-# The package is not on crates.io, so semver-check cannot query a baseline.
-# Disabling it prevents release-plz from skipping this package when it cannot
-# find a prior published version to compare against.
-semver_check = false
