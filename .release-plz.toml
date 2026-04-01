@@ -12,10 +12,11 @@ git_release_enable = true
 git_tag_enable = true
 
 # volumecontrol-napi is published to NPM, not crates.io.
-# Keep changelog + tag + GitHub release so the release-napi workflow can trigger.
+# release-plz should update the changelog and create a git tag only;
+# the GitHub release is created separately by the napi publish workflow.
 [[package]]
 name = "volumecontrol-napi"
-publish = false
 changelog_update = true
 git_tag_enable = true
-git_release_enable = true
+git_release_enable = false
+publish = false
