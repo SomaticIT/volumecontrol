@@ -27,7 +27,7 @@ jobs:
       windows: ${{ steps.filter.outputs.windows }}
       macos: ${{ steps.filter.outputs.macos }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -62,7 +62,7 @@ jobs:
     name: cargo fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust stable with rustfmt
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -74,7 +74,7 @@ jobs:
     name: cargo audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo registry and tools
@@ -101,7 +101,7 @@ jobs:
     if: needs.changes.outputs.linux == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -163,7 +163,7 @@ jobs:
       - name: cargo test volumecontrol
         run: cargo test -p volumecontrol -- --test-threads=1
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -186,7 +186,7 @@ jobs:
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo registry
@@ -232,7 +232,7 @@ jobs:
           - target: armv7-unknown-linux-musleabihf
             can_build: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust (stable)
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo registry & build
@@ -290,7 +290,7 @@ jobs:
           --target ${{ matrix.target }}
       - name: Setup Node.js
         if: matrix.can_build
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -328,7 +328,7 @@ jobs:
       NEFCON_VERSION: "v1.17.40"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -421,7 +421,7 @@ jobs:
         if: "!matrix.virtual_audio"
         run: cargo test -p volumecontrol --target ${{ matrix.target }} --no-run
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -446,7 +446,7 @@ jobs:
       RUSTDOCFLAGS: "-D warnings"
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo registry
@@ -482,7 +482,7 @@ jobs:
           - target: aarch64-apple-darwin
             runner: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -522,13 +522,13 @@ jobs:
           --target ${{ matrix.target }}
           --release
       - name: Upload release rlib
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rlib-${{ matrix.target }}
           path: target/${{ matrix.target }}/release/libvolumecontrol_macos.rlib
           retention-days: 1
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: lts/*
           cache: npm
@@ -551,12 +551,12 @@ jobs:
     permissions: {}
     steps:
       - name: Download x86_64 slice
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: rlib-x86_64-apple-darwin
           path: target/x86_64-apple-darwin/release/
       - name: Download aarch64 slice
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: rlib-aarch64-apple-darwin
           path: target/aarch64-apple-darwin/release/
@@ -577,7 +577,7 @@ jobs:
     env:
       RUSTDOCFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: Cache Cargo registry
