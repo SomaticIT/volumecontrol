@@ -1,5 +1,9 @@
 # volumecontrol-napi
 
+[![npm](https://img.shields.io/npm/v/@touchifyapp/volumecontrol.svg)](https://www.npmjs.com/package/@touchifyapp/volumecontrol)
+[![CI](https://github.com/touchifyapp/volumecontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/touchifyapp/volumecontrol/actions)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/touchifyapp/volumecontrol/blob/main/LICENSE)
+
 > Node.js bindings for the `volumecontrol` crate family via napi-rs.
 
 This package exposes the cross-platform audio volume control API to Node.js as a native addon built with [napi-rs](https://napi.rs). The correct system backend (PulseAudio on Linux, WASAPI on Windows, CoreAudio on macOS) is selected automatically at compile time.

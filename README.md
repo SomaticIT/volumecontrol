@@ -2,6 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/volumecontrol.svg)](https://crates.io/crates/volumecontrol)
 [![docs.rs](https://docs.rs/volumecontrol/badge.svg)](https://docs.rs/volumecontrol)
+[![npm](https://img.shields.io/npm/v/@touchifyapp/volumecontrol.svg)](https://www.npmjs.com/package/@touchifyapp/volumecontrol)
 [![CI](https://github.com/touchifyapp/volumecontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/touchifyapp/volumecontrol/actions)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/touchifyapp/volumecontrol/blob/main/LICENSE)
 
