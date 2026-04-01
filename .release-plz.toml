@@ -10,3 +10,12 @@ publish_timeout = "30s"
 git_release_enable = true
 # Tag format: crate_name-vX.Y.Z  (important for multi-crate workspaces)
 git_tag_enable = true
+
+# volumecontrol-napi is published to NPM, not crates.io.
+# Keep changelog + tag + GitHub release so the release-napi workflow can trigger.
+[[package]]
+name = "volumecontrol-napi"
+publish = false
+changelog_update = true
+git_tag_enable = true
+git_release_enable = true
