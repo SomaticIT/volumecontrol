@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-v0.1.1...volumecontrol-v0.1.2) - 2026-04-01
+
+### Added
+
+- *(napi)* add volumecontrol-napi crate with Node.js bindings via napi-rs ([#54](https://github.com/touchifyapp/volumecontrol/pull/54))
+
 ## [0.1.1](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-v0.1.0...volumecontrol-v0.1.1) - 2026-03-28
 
 ### Other
