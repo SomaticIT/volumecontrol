@@ -1,0 +1,220 @@
+# Triggered when release-plz creates a volumecontrol-napi-vX.Y.Z tag,
+# or manually to build and inspect artifacts without publishing.
+#
+# Builds native .node binaries for every napi target, then publishes
+# @touchifyapp/volumecontrol (and its per-platform packages) to npm.
+
+name: Release napi
+
+on:
+  push:
+    tags:
+      - 'volumecontrol-napi-v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Prepare: extract version from tag ────────────────────────────────────
+  prepare:
+    name: Prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        if: github.event_name == 'push'
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#volumecontrol-napi-v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  # ── Build .node binaries for every target ────────────────────────────────
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS — both x64 and arm64 build on the same runner
+          - target: x86_64-apple-darwin
+            runner: macos-latest
+          - target: aarch64-apple-darwin
+            runner: macos-latest
+
+          # Windows — all three ABIs build natively on windows-latest
+          - target: x86_64-pc-windows-msvc
+            runner: windows-latest
+          - target: i686-pc-windows-msvc
+            runner: windows-latest
+          - target: aarch64-pc-windows-msvc
+            runner: windows-latest
+
+          # Linux x64 — native build; needs PulseAudio dev libs
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-latest
+            linux_native: true
+
+          # Linux cross targets — use `cross` which reads Cross.toml
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-latest
+            use_cross: true
+          - target: armv7-unknown-linux-gnueabihf
+            runner: ubuntu-latest
+            use_cross: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: volumecontrol-napi/package-lock.json
+
+      - name: Install Rust (${{ matrix.target }})
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install PulseAudio dev libs (Linux native)
+        if: ${{ matrix.linux_native }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libpulse-dev libasound2-dev
+
+      - name: Install cross (Linux cross-compilation)
+        if: ${{ matrix.use_cross }}
+        run: cargo install cross --locked
+
+      - name: npm install
+        working-directory: volumecontrol-napi
+        run: npm install
+
+      - name: Update package.json version
+        if: needs.prepare.outputs.version != ''
+        working-directory: volumecontrol-napi
+        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version
+
+      - name: Build (using cross)
+        if: ${{ matrix.use_cross }}
+        working-directory: volumecontrol-napi
+        run: npx napi build --platform --release --target ${{ matrix.target }} --use-cross
+
+      - name: Build
+        if: ${{ !matrix.use_cross }}
+        working-directory: volumecontrol-napi
+        run: npx napi build --platform --release --target ${{ matrix.target }}
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-${{ matrix.target }}
+          path: volumecontrol-napi/*.node
+          if-no-files-found: error
+
+  # ── Publish to npm ────────────────────────────────────────────────────────
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    needs: [prepare, build]
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: volumecontrol-napi/package-lock.json
+
+      - name: npm install
+        working-directory: volumecontrol-napi
+        run: npm install
+
+      - name: Update package.json version
+        if: needs.prepare.outputs.version != ''
+        working-directory: volumecontrol-napi
+        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version
+
+      - name: Download all binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: volumecontrol-napi/artifacts
+
+      - name: Move .node files into package directory
+        working-directory: volumecontrol-napi
+        # napi artifacts defaults: input=./artifacts, output=current directory
+        run: npx napi artifacts
+
+      - name: List packages
+        working-directory: volumecontrol-napi
+        run: ls -R ./npm
+
+      - name: Configure npm authentication
+        if: github.event_name == 'push'
+        run: |
+          npm config set provenance true
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish platform packages
+        if: github.event_name == 'push'
+        working-directory: volumecontrol-napi
+        run: |
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${{ github.ref_name }} --jq '.id')
+          if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
+            echo "::error::Could not find GitHub release for tag ${{ github.ref_name }}"
+            exit 1
+          fi
+          npx napi prepublish -t npm --gh-release-id "$RELEASE_ID" --tag-style npm
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish main package
+        if: github.event_name == 'push'
+        working-directory: volumecontrol-napi
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#volumecontrol-napi-v}"
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            npm publish --access public
+          elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            npm publish --tag next --access public
+          else
+            echo "Not a release, skipping publish"
+          fi
+
+      - name: Update Cargo.toml version
+        if: github.event_name == 'push' && needs.prepare.outputs.version != ''
+        working-directory: volumecontrol-napi
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          sed -i "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" Cargo.toml
+
+      - name: Push version update
+        if: github.event_name == 'push' && needs.prepare.outputs.version != ''
+        run: |
+          BRANCH="${{ github.event.repository.default_branch }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add volumecontrol-napi/package.json volumecontrol-napi/Cargo.toml
+          git diff --staged --quiet || git commit -m "chore(napi): bump package version to ${{ needs.prepare.outputs.version }} [skip ci]"
+          git push origin HEAD:"$BRANCH"
