@@ -19,14 +19,12 @@ permissions:
   contents: read
 
 jobs:
-  # ── Prepare: extract version from tag and sync package files ─────────────
+  # ── Prepare: extract version from tag ────────────────────────────────────
   prepare:
     name: Prepare release
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,28 +37,6 @@ jobs:
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#volumecontrol-napi-v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Update package.json version
-        if: steps.version.outputs.version != ''
-        working-directory: volumecontrol-napi
-        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version
-
-      - name: Update Cargo.toml version
-        if: steps.version.outputs.version != ''
-        working-directory: volumecontrol-napi
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          sed -i "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" Cargo.toml
-
-      - name: Push version update
-        if: steps.version.outputs.version != ''
-        run: |
-          BRANCH="${{ github.event.repository.default_branch }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add volumecontrol-napi/package.json volumecontrol-napi/Cargo.toml
-          git diff --staged --quiet || git commit -m "chore(napi): bump package version to ${{ steps.version.outputs.version }} [skip ci]"
-          git push origin HEAD:"$BRANCH"
 
   # ── Build .node binaries for every target ────────────────────────────────
   build:
@@ -227,3 +203,20 @@ jobs:
           fi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Cargo.toml version
+        if: github.event_name == 'push' && needs.prepare.outputs.version != ''
+        working-directory: volumecontrol-napi
+        run: |
+          VERSION="${{ needs.prepare.outputs.version }}"
+          sed -i "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" Cargo.toml
+
+      - name: Push version update
+        if: github.event_name == 'push' && needs.prepare.outputs.version != ''
+        run: |
+          BRANCH="${{ github.event.repository.default_branch }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add volumecontrol-napi/package.json volumecontrol-napi/Cargo.toml
+          git diff --staged --quiet || git commit -m "chore(napi): bump package version to ${{ needs.prepare.outputs.version }} [skip ci]"
+          git push origin HEAD:"$BRANCH"
