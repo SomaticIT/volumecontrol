@@ -125,43 +125,11 @@ jobs:
           path: volumecontrol-napi/*.node
           if-no-files-found: error
 
-  # ── Build darwin-universal by lipo-ing x64 + arm64 ──────────────────────
-  macos-universal:
-    name: Build darwin-universal
-    runs-on: macos-latest
-    needs: build
-    steps:
-      - name: Download x86_64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: bindings-x86_64-apple-darwin
-          path: artifacts/x64
-
-      - name: Download aarch64 artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: bindings-aarch64-apple-darwin
-          path: artifacts/arm64
-
-      - name: Create universal binary with lipo
-        run: |
-          lipo -create \
-            artifacts/x64/volumecontrol.darwin-x64.node \
-            artifacts/arm64/volumecontrol.darwin-arm64.node \
-            -output volumecontrol.darwin-universal.node
-
-      - name: Upload universal binary
-        uses: actions/upload-artifact@v4
-        with:
-          name: bindings-darwin-universal
-          path: volumecontrol.darwin-universal.node
-          if-no-files-found: error
-
   # ── Publish to npm ────────────────────────────────────────────────────────
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    needs: [prepare, build, macos-universal]
+    needs: [prepare, build]
     permissions:
       contents: write
       id-token: write
@@ -227,8 +195,7 @@ jobs:
         if: github.event_name == 'push'
         working-directory: volumecontrol-napi
         run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#volumecontrol-napi-v}"
+          VERSION="${{ needs.prepare.outputs.version }}"
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             npm publish --access public
           elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
@@ -236,13 +203,6 @@ jobs:
           else
             echo "Not a release, skipping publish"
           fi
-
-      - name: Update Cargo.toml version
-        if: github.event_name == 'push' && needs.prepare.outputs.version != ''
-        working-directory: volumecontrol-napi
-        run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
-          sed -i "s/^version = \"[^\"]*\"/version = \"${VERSION}\"/" Cargo.toml
 
       - name: Push version update
         if: github.event_name == 'push' && needs.prepare.outputs.version != ''
