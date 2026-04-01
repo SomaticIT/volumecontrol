@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-v0.1.2...volumecontrol-v0.1.3) - 2026-04-01
+
+### Other
+
+- add npm and other badges to README files ([#73](https://github.com/touchifyapp/volumecontrol/pull/73))
+
 ## [0.1.2](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-v0.1.1...volumecontrol-v0.1.2) - 2026-04-01
 
 ### Added
