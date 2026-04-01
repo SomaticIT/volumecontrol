@@ -85,7 +85,7 @@ jobs:
           cache-dependency-path: volumecontrol-napi/package-lock.json
 
       - name: Install Rust (${{ matrix.target }})
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.85.0
         with:
           targets: ${{ matrix.target }}
 
@@ -125,16 +125,51 @@ jobs:
           path: volumecontrol-napi/*.node
           if-no-files-found: error
 
+  # ── Build darwin-universal by lipo-ing x64 + arm64 ──────────────────────
+  macos-universal:
+    name: Build darwin-universal
+    runs-on: macos-latest
+    needs: build
+    steps:
+      - name: Download x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-x86_64-apple-darwin
+          path: artifacts/x64
+
+      - name: Download aarch64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bindings-aarch64-apple-darwin
+          path: artifacts/arm64
+
+      - name: Create universal binary with lipo
+        run: |
+          lipo -create \
+            artifacts/x64/volumecontrol.darwin-x64.node \
+            artifacts/arm64/volumecontrol.darwin-arm64.node \
+            -output volumecontrol.darwin-universal.node
+
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: bindings-darwin-universal
+          path: volumecontrol.darwin-universal.node
+          if-no-files-found: error
+
   # ── Publish to npm ────────────────────────────────────────────────────────
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    needs: [prepare, build]
+    needs: [prepare, build, macos-universal]
     permissions:
       contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -213,8 +248,16 @@ jobs:
         if: github.event_name == 'push' && needs.prepare.outputs.version != ''
         run: |
           BRANCH="${{ github.event.repository.default_branch }}"
+          VERSION="${{ needs.prepare.outputs.version }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Ensure we push onto the current branch tip (not the detached tag HEAD).
+          # This job runs on ubuntu-latest so `sed -i` needs no backup extension.
+          git fetch origin "$BRANCH"
+          git checkout -B ci-version-bump "origin/$BRANCH"
+          # Re-apply the version bumps on top of the branch tip
+          npm version "$VERSION" --no-git-tag-version --prefix volumecontrol-napi
+          sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" volumecontrol-napi/Cargo.toml
           git add volumecontrol-napi/package.json volumecontrol-napi/Cargo.toml
-          git diff --staged --quiet || git commit -m "chore(napi): bump package version to ${{ needs.prepare.outputs.version }} [skip ci]"
-          git push origin HEAD:"$BRANCH"
+          git diff --staged --quiet || git commit -m "chore(napi): bump package version to $VERSION [skip ci]"
+          git push origin "ci-version-bump:$BRANCH"
