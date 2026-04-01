@@ -39,6 +39,10 @@ device.setVol(50);
 // Check mute state
 console.log(`Muted: ${device.isMute()}`);
 
+// Mute / unmute the device
+device.setMute(true);   // mute
+device.setMute(false);  // unmute
+
 // List all available audio devices
 const devices = AudioDevice.list();
 devices.forEach(d => console.log(`${d.name} (${d.id})`));
