@@ -1,4 +1,4 @@
-# volumecontrol-napi
+# @touchifyapp/volumecontrol
 
 [![npm](https://img.shields.io/npm/v/@touchifyapp/volumecontrol.svg)](https://www.npmjs.com/package/@touchifyapp/volumecontrol)
 [![CI](https://github.com/touchifyapp/volumecontrol/actions/workflows/ci.yml/badge.svg)](https://github.com/touchifyapp/volumecontrol/actions)

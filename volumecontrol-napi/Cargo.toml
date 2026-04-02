@@ -15,8 +15,8 @@ crate-type = ["cdylib"]
 [dependencies]
 volumecontrol = { path = "../volumecontrol", version = "0.1.4" }
 volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.2" }
-napi = { version = "2", features = ["napi9"] }
-napi-derive = "2"
+napi = { version = "3", features = ["napi9"] }
+napi-derive = "3"
 
 [build-dependencies]
 napi-build = "2"
