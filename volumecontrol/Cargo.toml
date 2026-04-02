@@ -14,7 +14,7 @@ keywords = ["audio", "volume", "pulseaudio", "wasapi", "coreaudio"]
 categories = ["multimedia::audio", "os"]
 
 [dependencies]
-volumecontrol-core = { workspace = true }
+volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.1" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 volumecontrol-linux = { path = "../volumecontrol-linux", version = "0.1.1", features = [

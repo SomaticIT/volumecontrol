@@ -14,4 +14,4 @@ keywords = ["audio", "volume", "multimedia"]
 categories = ["multimedia::audio", "os"]
 
 [dependencies]
-thiserror = { workspace = true }
+thiserror = "2.0"

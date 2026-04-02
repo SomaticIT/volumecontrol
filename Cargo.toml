@@ -16,10 +16,3 @@ repository = "https://github.com/touchifyapp/volumecontrol"
 homepage = "https://github.com/touchifyapp/volumecontrol"
 authors = ["SomaticIT <github@somatic.it>"]
 rust-version = "1.88.0"
-
-[workspace.dependencies]
-volumecontrol-core = { path = "volumecontrol-core", version = "0.1.1" }
-thiserror = "2.0"
-napi = { version = "2", features = ["napi9"] }
-napi-derive = "2"
-napi-build = "2"

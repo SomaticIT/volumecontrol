@@ -19,7 +19,7 @@ all-features = true
 
 [dependencies]
 volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.1" }
-thiserror = { workspace = true }
+thiserror = "2.0"
 
 # Enabled by the `wasapi` feature; only meaningful when targeting Windows.
 [dependencies.windows]
