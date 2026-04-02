@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-v0.1.3...volumecontrol-v0.1.4) - 2026-04-02
+
+### Other
+
+- remove workspace.dependencies and use explicit versions in each crate ([#77](https://github.com/touchifyapp/volumecontrol/pull/77))
+
 ## [0.1.3](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-v0.1.2...volumecontrol-v0.1.3) - 2026-04-01
 
 ### Other

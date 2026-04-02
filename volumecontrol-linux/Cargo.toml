@@ -1,7 +1,7 @@
 [package]
 name = "volumecontrol-linux"
 description = "Linux (PulseAudio) volume control bindings for volumecontrol"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -17,7 +17,7 @@ categories = ["multimedia::audio", "os"]
 all-features = true
 
 [dependencies]
-volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.1" }
+volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.2" }
 
 # Enabled by the `pulseaudio` feature once native PulseAudio dev libraries
 # are available on the build host.

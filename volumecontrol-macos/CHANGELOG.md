@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-macos-v0.1.1...volumecontrol-macos-v0.1.2) - 2026-04-02
+
+### Other
+
+- updated the following local packages: volumecontrol-core
+
 ## [0.1.1](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-macos-v0.1.0...volumecontrol-macos-v0.1.1) - 2026-03-28
 
 ### Fixed
