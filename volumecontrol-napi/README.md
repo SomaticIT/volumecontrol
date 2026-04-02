@@ -46,6 +46,11 @@ device.setMute(false);  // unmute
 // List all available audio devices
 const devices = AudioDevice.list();
 devices.forEach(d => console.log(`${d.name} (${d.id})`));
+
+// Get a device from name/id
+const firstDevice = devices[0];
+const deviceFromId = AudioDevice.fromId(firstDevice.id);
+const deviceFromName = AudioDevice.fromName(firstDevice.name);
 ```
 
 Rust `snake_case` method names are automatically mapped to JavaScript `camelCase` by napi-rs:
