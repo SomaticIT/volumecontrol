@@ -13,8 +13,8 @@ rust-version.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-volumecontrol = { path = "../volumecontrol", version = "0.1.3" }
-volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.1" }
+volumecontrol = { path = "../volumecontrol", version = "0.1.4" }
+volumecontrol-core = { path = "../volumecontrol-core", version = "0.1.2" }
 napi = { version = "2", features = ["napi9"] }
 napi-derive = "2"
 
