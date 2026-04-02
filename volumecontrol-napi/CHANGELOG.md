@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/touchifyapp/volumecontrol/compare/volumecontrol-napi-v0.1.0...volumecontrol-napi-v0.1.1) - 2026-04-02
+
+### Added
+
+- *(napi)* upgrade napi dependencies ([#79](https://github.com/touchifyapp/volumecontrol/pull/79))
+
+### Other
+
+- update metadata
+- *(napi)* upgrade vitest
+
 ## [0.1.0](https://github.com/touchifyapp/volumecontrol/releases/tag/volumecontrol-napi-v0.1.0) - 2026-04-01
 
 ### Added
