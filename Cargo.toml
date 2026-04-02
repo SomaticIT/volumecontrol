@@ -15,7 +15,7 @@ license = "MIT"
 repository = "https://github.com/touchifyapp/volumecontrol"
 homepage = "https://github.com/touchifyapp/volumecontrol"
 authors = ["SomaticIT <github@somatic.it>"]
-rust-version = "1.85.0"
+rust-version = "1.88.0"
 
 [workspace.dependencies]
 volumecontrol-core = { path = "volumecontrol-core", version = "0.1.1" }

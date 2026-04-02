@@ -85,7 +85,7 @@ jobs:
           cache-dependency-path: volumecontrol-napi/package-lock.json
 
       - name: Install Rust (${{ matrix.target }})
-        uses: dtolnay/rust-toolchain@1.85.0
+        uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: ${{ matrix.target }}
 
