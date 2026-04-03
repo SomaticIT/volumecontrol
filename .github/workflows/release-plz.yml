@@ -63,7 +63,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
       - uses: actions/create-github-app-token@v3
         id: app-token
         with:
@@ -101,6 +101,7 @@ jobs:
               exit 0
             fi
 
+            gh auth setup-git
             gh pr checkout $PR_NUMBER
             jq --arg version "$VERSION" '.version = $version' volumecontrol-napi/package.json > /tmp/package.json.tmp
             mv /tmp/package.json.tmp volumecontrol-napi/package.json
