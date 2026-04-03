@@ -13,8 +13,7 @@
   },
   "files": [
     "index.js",
-    "index.d.ts",
-    "*.node"
+    "index.d.ts"
   ],
   "scripts": {
     "build": "napi build --platform --release",
