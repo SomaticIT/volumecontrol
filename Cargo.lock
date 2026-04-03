@@ -425,7 +425,7 @@ dependencies = [
 
 [[package]]
 name = "volumecontrol-napi"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "napi",
  "napi-build",

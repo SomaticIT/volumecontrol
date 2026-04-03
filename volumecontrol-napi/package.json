@@ -1,6 +1,6 @@
 {
   "name": "@touchifyapp/volumecontrol",
-  "version": "0.1.0",
+  "version": "0.1.3",
   "description": "Cross-platform system volume control for Node.js — powered by Rust and napi-rs",
   "author": "Touchify <dev@touchify.io>",
   "license": "MIT",
