@@ -102,7 +102,8 @@ jobs:
             fi
 
             gh pr checkout $PR_NUMBER
-            cat volumecontrol-napi/package.json | jq '.version = "'$VERSION'"' | tee volumecontrol-napi/package.json
+            jq --arg version "$VERSION" '.version = $version' volumecontrol-napi/package.json > /tmp/package.json.tmp
+            mv /tmp/package.json.tmp volumecontrol-napi/package.json
             git add .
             git commit --amend --no-edit
             git push --force-with-lease
