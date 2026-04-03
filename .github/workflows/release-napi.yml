@@ -157,7 +157,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION=$(cat package.json | jq -r .version)
-          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${{ github.ref_name }} --jq '.id')
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/volumecontrol-napi-v$VERSION --jq '.id')
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
             echo "::error::Could not find GitHub release for tag ${{ github.ref_name }}"
             exit 1
