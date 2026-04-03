@@ -170,12 +170,10 @@ jobs:
         working-directory: volumecontrol-napi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           RELEASE_ID: ${{ steps.gh_release.outputs.gh_release_id }}
           VERSION: ${{ steps.gh_release.outputs.version }}
         run: |
           npm config set provenance true
-          npm set "//registry.npmjs.org/:_authToken" $NPM_TOKEN
 
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             npm publish --access public
