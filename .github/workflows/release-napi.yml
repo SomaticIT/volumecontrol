@@ -11,6 +11,12 @@ on:
     tags:
       - 'volumecontrol-napi-v*'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Whether to publish to npm (true/false). Only applicable if the release already exists on GitHub.'
+        type: boolean
+        required: false
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -19,30 +25,10 @@ permissions:
   contents: read
 
 jobs:
-  # ── Prepare: extract version from tag ────────────────────────────────────
-  prepare:
-    name: Prepare release
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Extract version from tag
-        id: version
-        if: github.event_name == 'push'
-        run: |
-          TAG="${{ github.ref_name }}"
-          VERSION="${TAG#volumecontrol-napi-v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
   # ── Build .node binaries for every target ────────────────────────────────
   build:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
-    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -103,11 +89,6 @@ jobs:
         working-directory: volumecontrol-napi
         run: npm install
 
-      - name: Update package.json version
-        if: needs.prepare.outputs.version != ''
-        working-directory: volumecontrol-napi
-        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version
-
       - name: Build (using cross)
         if: ${{ matrix.use_cross }}
         working-directory: volumecontrol-napi
@@ -129,7 +110,7 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    needs: [prepare, build]
+    needs: build
     permissions:
       contents: write
       id-token: write
@@ -151,11 +132,6 @@ jobs:
         working-directory: volumecontrol-napi
         run: npm install
 
-      - name: Update package.json version
-        if: needs.prepare.outputs.version != ''
-        working-directory: volumecontrol-napi
-        run: npm version "${{ needs.prepare.outputs.version }}" --no-git-tag-version
-
       - name: Create npm platform directories
         working-directory: volumecontrol-napi
         run: npx napi create-npm-dirs
@@ -167,39 +143,38 @@ jobs:
 
       - name: Move .node files into package directory
         working-directory: volumecontrol-napi
-        # napi artifacts defaults: input=./artifacts, output=current directory
         run: npx napi artifacts
 
       - name: List packages
         working-directory: volumecontrol-napi
         run: ls -R ./npm
 
-      - name: Configure npm authentication
-        if: github.event_name == 'push'
-        run: |
-          npm config set provenance true
-          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish platform packages
-        if: github.event_name == 'push'
+      - name: Find GitHub release
+        id: gh_release
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish)
         working-directory: volumecontrol-napi
         run: |
+          VERSION=$(cat package.json | jq -r .version)
           RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${{ github.ref_name }} --jq '.id')
           if [ -z "$RELEASE_ID" ] || [ "$RELEASE_ID" = "null" ]; then
             echo "::error::Could not find GitHub release for tag ${{ github.ref_name }}"
             exit 1
           fi
-          npx napi prepublish -t npm --gh-release-id "$RELEASE_ID" --tag-style npm
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "gh_release_id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Publish packages
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.publish)
+        working-directory: volumecontrol-napi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Publish main package
-        if: github.event_name == 'push'
-        working-directory: volumecontrol-napi
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          RELEASE_ID: ${{ steps.gh_release.outputs.gh_release_id }}
+          VERSION: ${{ steps.gh_release.outputs.version }}
         run: |
-          VERSION="${{ needs.prepare.outputs.version }}"
+          npm config set provenance true
+          echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
+
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             npm publish --access public
           elif [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]]; then
@@ -207,21 +182,3 @@ jobs:
           else
             echo "Not a release, skipping publish"
           fi
-
-      - name: Push version update
-        if: github.event_name == 'push' && needs.prepare.outputs.version != ''
-        run: |
-          BRANCH="${{ github.event.repository.default_branch }}"
-          VERSION="${{ needs.prepare.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Ensure we push onto the current branch tip (not the detached tag HEAD).
-          # This job runs on ubuntu-latest so `sed -i` needs no backup extension.
-          git fetch origin "$BRANCH"
-          git checkout -B ci-version-bump "origin/$BRANCH"
-          # Re-apply the version bumps on top of the branch tip
-          npm version "$VERSION" --no-git-tag-version --prefix volumecontrol-napi
-          sed -i "s/^version = \"[^\"]*\"/version = \"$VERSION\"/" volumecontrol-napi/Cargo.toml
-          git add volumecontrol-napi/package.json volumecontrol-napi/Cargo.toml
-          git diff --staged --quiet || git commit -m "chore(napi): bump package version to $VERSION [skip ci]"
-          git push origin "ci-version-bump:$BRANCH"
